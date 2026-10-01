@@ -9,6 +9,7 @@ export interface CaptureRequest {
   pageId: string;
   workspaceId: string;
   actorIds: string[];
+  allowDeleted?: boolean;
 }
 
 @Injectable()
@@ -43,7 +44,10 @@ export class VersionCaptureService {
       .where('workspaceId', '=', request.workspaceId)
       .forUpdate()
       .executeTakeFirst();
-    if (!page || page.deletedAt) throw new Error('Version page is unavailable');
+    if (!page || (page.deletedAt && !request.allowDeleted)) throw new Error('Version page is unavailable');
+    await sql`SELECT pg_advisory_xact_lock(hashtext('sop-capture-order'), hashtext(${page.spaceId}))`.execute(trx);
+    const previous = await sql`SELECT id FROM sop_page_versions WHERE workspace_id = ${page.workspaceId}::uuid AND page_id = ${page.id}::uuid AND space_id <> ${page.spaceId}::uuid LIMIT 1`.execute(trx);
+    if (previous.rows.length) throw new Error('Cross-space version transfer is not enabled');
     const actors = await trx
       .selectFrom('users')
       .select(['id', 'name'])
@@ -54,6 +58,7 @@ export class VersionCaptureService {
       throw new Error('Version contributors do not belong to the workspace');
     }
     const snapshot = buildPageSnapshot(page, actors);
+    if (Buffer.byteLength(snapshot.json) > 8 * 1024 * 1024) throw new Error('Version snapshot exceeds 8 MiB');
     const id = randomUUID();
     // The page row lock serializes this page's revision allocation and capture.
     const result = await sql<{ revision: number }>`

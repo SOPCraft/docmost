@@ -185,6 +185,7 @@ export class PageRepo {
   async insertPage(
     insertablePage: InsertablePage,
     trx?: KyselyTransaction,
+    options?: { emitEvent?: boolean },
   ): Promise<Page> {
     const db = dbOrTx(this.db, trx);
     const result = await db
@@ -193,12 +194,13 @@ export class PageRepo {
       .returning(this.baseFields)
       .executeTakeFirst();
 
-    this.eventEmitter.emit(EventName.PAGE_CREATED, {
-      pageIds: [result.id],
-      workspaceId: result.workspaceId,
-    });
+    if (options?.emitEvent !== false) this.emitPageCreated([result.id], result.workspaceId);
 
     return result;
+  }
+
+  emitPageCreated(pageIds: string[], workspaceId: string): void {
+    this.eventEmitter.emit(EventName.PAGE_CREATED, { pageIds, workspaceId });
   }
 
   async deletePage(pageId: string): Promise<void> {

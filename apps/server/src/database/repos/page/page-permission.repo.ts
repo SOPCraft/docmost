@@ -383,16 +383,13 @@ export class PagePermissionRepo {
   async canUserEditPage(
     userId: string,
     pageId: string,
+    opts?: { trx?: KyselyTransaction; fresh?: boolean },
   ): Promise<{
     hasAnyRestriction: boolean;
     canAccess: boolean;
     canEdit: boolean;
   }> {
-    return withCache(
-      this.cacheManager,
-      CacheKey.PAGE_CAN_EDIT(userId, pageId),
-      PERMISSION_CACHE_TTL_MS,
-      async () => {
+    const load = async () => {
         const result = await sql<{
           canAccess: boolean | null;
           canEdit: boolean | null;
@@ -419,7 +416,7 @@ export class PagePermissionRepo {
                 SELECT gu.group_id FROM group_users gu WHERE gu.user_id = ${userId}::uuid
               )
             )
-        `.execute(this.db);
+        `.execute(dbOrTx(this.db, opts?.trx));
 
         const row = result.rows[0];
         if (!row || row.canAccess === null) {
@@ -430,8 +427,9 @@ export class PagePermissionRepo {
           canAccess: row.canAccess,
           canEdit: row.canAccess && (row.canEdit ?? false),
         };
-      },
-    );
+    };
+    if (opts?.trx || opts?.fresh) return load();
+    return withCache(this.cacheManager, CacheKey.PAGE_CAN_EDIT(userId, pageId), PERMISSION_CACHE_TTL_MS, load);
   }
 
   /**

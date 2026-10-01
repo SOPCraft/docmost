@@ -1,3 +1,4 @@
+import VersionHistoryButton from "@/features/page-versions/version-history-button";
 import classes from "./page-header.module.css";
 import PageHeaderMenu from "@/features/page/components/header/page-header-menu.tsx";
 import { Badge, Group, Tooltip } from "@mantine/core";
@@ -60,6 +61,7 @@ export default function PageHeader({ readOnly }: Props) {
         </Group>
 
         <Group justify="flex-end" h="100%" px="md" wrap="nowrap" gap="var(--mantine-spacing-xs)">
+          {page?.id && <VersionHistoryButton key={page.id} pageId={page.id} />}
           <PageHeaderMenu readOnly={readOnly} />
         </Group>
       </Group>
