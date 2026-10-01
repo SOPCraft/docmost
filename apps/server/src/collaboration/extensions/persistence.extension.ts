@@ -6,6 +6,8 @@ import {
   onStoreDocumentPayload,
 } from '@hocuspocus/server';
 import * as Y from 'yjs';
+import { VersionCaptureService } from '../../integrations/versioning/version-capture.service';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { TiptapTransformer } from '@hocuspocus/transformer';
 import { getPageId, jsonToText, tiptapExtensions } from '../collaboration.util';
@@ -47,6 +49,7 @@ export class PersistenceExtension implements Extension {
     @InjectQueue(QueueName.NOTIFICATION_QUEUE) private notificationQueue: Queue,
     private readonly collabHistory: CollabHistoryService,
     private readonly transclusionService: TransclusionService,
+    private readonly versionCapture: VersionCaptureService,
   ) {}
 
   async onLoadDocument(data: onLoadDocumentPayload) {
@@ -113,12 +116,17 @@ export class PersistenceExtension implements Extension {
 
     let page: Page = null;
     const editingUserIds = this.consumeContributors(documentName);
+    if (lastContext?.user?.id && !editingUserIds.includes(lastContext.user.id)) {
+      editingUserIds.push(lastContext.user.id);
+    }
+    let capturedVersion: Awaited<ReturnType<VersionCaptureService['capture']>> = null;
 
     try {
       await executeTx(this.db, async (trx) => {
         page = await this.pageRepo.findById(pageId, {
           withLock: true,
           includeContent: true,
+          includeYdoc: true,
           trx,
         });
 
@@ -127,7 +135,12 @@ export class PersistenceExtension implements Extension {
           return;
         }
 
-        if (isDeepStrictEqual(tiptapJson, page.content)) {
+        if (page.deletedAt && this.versionCapture.config.enabled) {
+          throw new Error('Cannot capture an update to a deleted page');
+        }
+        const sameContent = isDeepStrictEqual(tiptapJson, page.content);
+        const sameState = page.ydoc && ydocState.equals(Buffer.from(page.ydoc));
+        if (sameContent && sameState) {
           page = null;
           return;
         }
@@ -151,23 +164,31 @@ export class PersistenceExtension implements Extension {
             content: tiptapJson,
             textContent: textContent,
             ydoc: ydocState,
-            lastUpdatedById: lastContext.user.id,
+            lastUpdatedById: lastContext?.user?.id,
             contributorIds: contributorIds,
           },
           pageId,
           trx,
+          { emitEvent: false },
         );
 
-        this.logger.debug(`Page updated: ${pageId} - SlugId: ${page.slugId}`);
+        capturedVersion = await this.versionCapture.capture(trx, {
+          pageId, workspaceId: page.workspaceId, actorIds: editingUserIds,
+        });
+        this.logger.debug('Page persisted with its version task');
       });
     } catch (err) {
-      this.logger.error(`Failed to update page ${pageId}`, err);
+      this.restoreContributors(documentName, editingUserIds);
+      this.logger.error('Page persistence failed; retaining contributors for retry');
+      throw err;
     }
 
     if (page) {
+      this.pageRepo.emitPageUpdated([pageId], page.workspaceId);
       document.broadcastStateless(
         JSON.stringify({
           type: 'page.updated',
+          versionCapture: capturedVersion ? { ...capturedVersion, status: 'pending' } : undefined,
           updatedAt: new Date().toISOString(),
           lastUpdatedById: lastContext?.user?.id,
           lastUpdatedBy: lastContext?.user
@@ -233,6 +254,12 @@ export class PersistenceExtension implements Extension {
   async afterUnloadDocument(data: afterUnloadDocumentPayload) {
     const documentName = data.documentName;
     this.contributors.delete(documentName);
+  }
+
+  private restoreContributors(documentName: string, userIds: string[]) {
+    const pending = this.contributors.get(documentName) ?? new Set<string>();
+    for (const userId of userIds) pending.add(userId);
+    if (pending.size) this.contributors.set(documentName, pending);
   }
 
   private consumeContributors(documentName: string): string[] {

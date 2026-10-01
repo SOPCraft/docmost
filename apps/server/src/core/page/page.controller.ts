@@ -395,7 +395,7 @@ export class PageController {
     // make sure they have page level access to the page
     await this.pageAccessService.validateCanEdit(page, user);
 
-    await this.pageRepo.restorePage(pageIdDto.pageId, workspace.id);
+    await this.pageService.restoreTrashedPage(pageIdDto.pageId, workspace.id, user.id);
 
     this.auditService.log({
       event: AuditEvent.PAGE_RESTORED,
@@ -742,7 +742,7 @@ export class PageController {
       await this.pageAccessService.validateCanEdit(targetParent, user);
     }
 
-    return this.pageService.movePage(dto, movedPage);
+    return this.pageService.movePage(dto, movedPage, user.id);
   }
 
   @HttpCode(HttpStatus.OK)

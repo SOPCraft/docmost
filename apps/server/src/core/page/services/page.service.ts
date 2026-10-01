@@ -56,6 +56,8 @@ import { markdownToHtml } from '@docmost/editor-ext';
 import { WatcherService } from '../../watcher/watcher.service';
 import { sql } from 'kysely';
 import { TransclusionService } from '../transclusion/transclusion.service';
+import { VersionCaptureService } from '../../../integrations/versioning/version-capture.service';
+import { VersionedTrashService } from './versioned-trash.service';
 
 @Injectable()
 export class PageService {
@@ -74,6 +76,8 @@ export class PageService {
     private collaborationGateway: CollaborationGateway,
     private readonly watcherService: WatcherService,
     private readonly transclusionService: TransclusionService,
+    private readonly versionCapture: VersionCaptureService,
+    private readonly versionedTrash: VersionedTrashService,
   ) {}
 
   async findById(
@@ -96,6 +100,11 @@ export class PageService {
     trx?: KyselyTransaction,
     isBase: boolean = false,
   ): Promise<Page> {
+    if (this.versionCapture.config.enabled && !trx) {
+      const created = await executeTx(this.db, tx => this.create(userId, workspaceId, createPageDto, tx, isBase));
+      this.pageRepo.emitPageCreated([created.id], workspaceId);
+      return created;
+    }
     let parentPageId = undefined;
 
     // check if parent page exists
@@ -147,7 +156,10 @@ export class PageService {
       content,
       textContent,
       ydoc,
-    }, trx);
+    }, trx, { emitEvent: !this.versionCapture.config.enabled });
+    if (this.versionCapture.config.enabled) {
+      await this.versionCapture.capture(trx, { pageId: page.id, workspaceId, actorIds: [userId] });
+    }
 
     if (trx) {
       // Add the watcher inside the caller's transaction so the async worker
@@ -229,6 +241,21 @@ export class PageService {
     contributors.add(user.id);
     const contributorIds = Array.from(contributors);
 
+    if (this.versionCapture.config.enabled) {
+      const changed = await executeTx(this.db, async trx => {
+        const current = await this.pageRepo.findById(page.id, { withLock: true, trx });
+        if (!current || current.deletedAt || current.workspaceId !== user.workspaceId) throw new NotFoundException('Page not found');
+        const hasChanges = (updatePageDto.title !== undefined && updatePageDto.title !== current.title) ||
+          (updatePageDto.icon !== undefined && updatePageDto.icon !== current.icon);
+        if (!hasChanges) return false;
+        await this.pageRepo.updatePage({ title: updatePageDto.title, icon: updatePageDto.icon,
+          lastUpdatedById: user.id, contributorIds: [...new Set([...(current.contributorIds || []), user.id])] },
+          page.id, trx, { emitEvent: false });
+        await this.versionCapture.capture(trx, { pageId: page.id, workspaceId: user.workspaceId, actorIds: [user.id] });
+        return true;
+      });
+      if (changed) this.pageRepo.emitPageUpdated([page.id], user.workspaceId);
+    } else {
     await this.pageRepo.updatePage(
       {
         title: updatePageDto.title,
@@ -239,6 +266,7 @@ export class PageService {
       },
       page.id,
     );
+    }
 
     this.generalQueue
       .add(QueueJob.ADD_PAGE_WATCHERS, {
@@ -396,6 +424,7 @@ export class PageService {
   }
 
   async movePageToSpace(rootPage: Page, spaceId: string, userId: string) {
+    if (this.versionCapture.config.enabled) throw new ConflictException('Versioned cross-space transfer is not enabled');
     return executeTx(this.db, async (trx) => {
       await this.pageRepo.lockPageHierarchySpaces(
         [rootPage.spaceId, spaceId],
@@ -715,7 +744,13 @@ export class PageService {
       }),
     );
 
-    await this.db.insertInto('pages').values(insertablePages).execute();
+    if (this.versionCapture.config.enabled) {
+      await executeTx(this.db, async trx => {
+        await trx.insertInto('pages').values(insertablePages).execute();
+        for (const inserted of insertablePages) await this.versionCapture.capture(trx,
+          {pageId:inserted.id as string,workspaceId:authUser.workspaceId,actorIds:[authUser.id]});
+      });
+    } else await this.db.insertInto('pages').values(insertablePages).execute();
 
     // Extract transclusions from every duplicated page and persist them in
     // one statement. Duplication bypasses Yjs onStoreDocument; brand-new
@@ -831,7 +866,7 @@ export class PageService {
     };
   }
 
-  async movePage(dto: MovePageDto, movedPage: Page) {
+  async movePage(dto: MovePageDto, movedPage: Page, actorId?: string) {
     // validate position value by attempting to generate a key
     try {
       generateJitteredKeyBetween(dto.position, null);
@@ -894,8 +929,11 @@ export class PageService {
         },
         dto.pageId,
         trx,
+        { emitEvent: !this.versionCapture.config.enabled },
       );
+      if (this.versionCapture.config.enabled) await this.versionCapture.capture(trx, {pageId:currentPage.id,workspaceId:currentPage.workspaceId,actorIds:[actorId]});
     });
+    if (this.versionCapture.config.enabled) this.pageRepo.emitPageUpdated([movedPage.id], movedPage.workspaceId);
   }
 
   async getPageBreadCrumbs(childPageId: string) {
@@ -1050,6 +1088,7 @@ export class PageService {
   }
 
   async forceDelete(pageId: string, workspaceId: string): Promise<void> {
+    if (this.versionCapture.config.enabled) throw new ConflictException('Permanent removal requires a version-retention policy; use trash');
     // Get all descendant IDs (including the page itself) using recursive CTE
     const descendants = await this.db
       .withRecursive('page_descendants', (db) =>
@@ -1102,7 +1141,13 @@ export class PageService {
     userId: string,
     workspaceId: string,
   ): Promise<void> {
+    if (this.versionCapture.config.enabled) return this.versionedTrash.change(pageId, workspaceId, userId, true);
     await this.pageRepo.removePage(pageId, userId, workspaceId);
+  }
+
+  async restoreTrashedPage(pageId: string, workspaceId: string, userId: string): Promise<void> {
+    if (this.versionCapture.config.enabled) return this.versionedTrash.change(pageId, workspaceId, userId, false);
+    return this.pageRepo.restorePage(pageId, workspaceId);
   }
 
   private async parseProsemirrorContent(

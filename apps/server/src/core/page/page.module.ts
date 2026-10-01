@@ -9,17 +9,24 @@ import { CollaborationModule } from '../../collaboration/collaboration.module';
 import { WatcherModule } from '../watcher/watcher.module';
 import { TransclusionModule } from './transclusion/transclusion.module';
 import { LabelModule } from '../label/label.module';
+import { VersioningModule } from '../../integrations/versioning/versioning.module';
+import { VersionedTrashService } from './services/versioned-trash.service';
+import { VersionHistoryService } from './services/version-history.service';
+import { VersionHistoryController } from './version-history.controller';
 
 @Module({
-  controllers: [PageController],
+  controllers: [PageController, VersionHistoryController],
   providers: [
     PageService,
+    VersionedTrashService,
+    VersionHistoryService,
     PageHistoryService,
     TrashCleanupService,
     BacklinkService,
   ],
   exports: [PageService, PageHistoryService],
   imports: [
+    VersioningModule,
     StorageModule,
     CollaborationModule,
     WatcherModule,

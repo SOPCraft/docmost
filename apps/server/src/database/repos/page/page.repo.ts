@@ -134,14 +134,16 @@ export class PageRepo {
     updatablePage: UpdatablePage,
     pageId: string,
     trx?: KyselyTransaction,
+    options?: { emitEvent?: boolean },
   ) {
-    return this.updatePages(updatablePage, [pageId], trx);
+    return this.updatePages(updatablePage, [pageId], trx, options);
   }
 
   async updatePages(
     updatePageData: UpdatablePage,
     pageIds: string[],
     trx?: KyselyTransaction,
+    options?: { emitEvent?: boolean },
   ) {
     const result = await dbOrTx(this.db, trx)
       .updateTable('pages')
@@ -153,12 +155,15 @@ export class PageRepo {
       )
       .executeTakeFirst();
 
-    this.eventEmitter.emit(EventName.PAGE_UPDATED, {
-      pageIds: pageIds,
-      workspaceId: updatePageData.workspaceId,
-    });
+    if (options?.emitEvent !== false) {
+      this.emitPageUpdated(pageIds, updatePageData.workspaceId as string);
+    }
 
     return result;
+  }
+
+  emitPageUpdated(pageIds: string[], workspaceId?: string): void {
+    this.eventEmitter.emit(EventName.PAGE_UPDATED, { pageIds, workspaceId });
   }
 
   async lockPageHierarchySpaces(
@@ -180,6 +185,7 @@ export class PageRepo {
   async insertPage(
     insertablePage: InsertablePage,
     trx?: KyselyTransaction,
+    options?: { emitEvent?: boolean },
   ): Promise<Page> {
     const db = dbOrTx(this.db, trx);
     const result = await db
@@ -188,12 +194,13 @@ export class PageRepo {
       .returning(this.baseFields)
       .executeTakeFirst();
 
-    this.eventEmitter.emit(EventName.PAGE_CREATED, {
-      pageIds: [result.id],
-      workspaceId: result.workspaceId,
-    });
+    if (options?.emitEvent !== false) this.emitPageCreated([result.id], result.workspaceId);
 
     return result;
+  }
+
+  emitPageCreated(pageIds: string[], workspaceId: string): void {
+    this.eventEmitter.emit(EventName.PAGE_CREATED, { pageIds, workspaceId });
   }
 
   async deletePage(pageId: string): Promise<void> {
