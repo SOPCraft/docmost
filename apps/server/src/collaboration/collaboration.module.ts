@@ -1,4 +1,5 @@
 import { Logger, Module, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { VersionCaptureService } from '../integrations/versioning/version-capture.service';
 import { AuthenticationExtension } from './extensions/authentication.extension';
 import { PersistenceExtension } from './extensions/persistence.extension';
 import { CollaborationGateway } from './collaboration.gateway';
@@ -22,6 +23,7 @@ import { EnvironmentModule } from '../integrations/environment/environment.modul
     CollaborationGateway,
     AuthenticationExtension,
     PersistenceExtension,
+    VersionCaptureService,
     LoggerExtension,
     HistoryProcessor,
     CollabHistoryService,

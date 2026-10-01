@@ -1,4 +1,5 @@
 import { Hocuspocus } from '@hocuspocus/server';
+import { readVersioningConfig } from '../integrations/versioning/versioning.config';
 import { IncomingMessage } from 'http';
 import WebSocket from 'ws';
 import { AuthenticationExtension } from './extensions/authentication.extension';
@@ -46,9 +47,10 @@ export class CollaborationGateway {
     this.redisConfig = parseRedisUrl(this.environmentService.getRedisUrl());
     this.withRedis = !this.environmentService.isCollabDisableRedis();
 
+    const versioning = readVersioningConfig();
     this.hocuspocus = new Hocuspocus({
-      debounce: 10000,
-      maxDebounce: 45000,
+      debounce: versioning.debounceMs,
+      maxDebounce: versioning.maxDebounceMs,
       unloadImmediately: false,
       extensions: [
         this.authenticationExtension,
