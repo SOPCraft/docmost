@@ -1,4 +1,11 @@
-import { ActionIcon, Group, Menu, Text, ThemeIcon, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Group,
+  Menu,
+  Text,
+  ThemeIcon,
+  Tooltip,
+} from "@mantine/core";
 import {
   IconArrowRight,
   IconArrowsHorizontal,
@@ -18,9 +25,17 @@ import {
   IconTrash,
   IconWifiOff,
 } from "@tabler/icons-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAsideTriggerProps } from "@/hooks/use-toggle-aside.tsx";
-import { useAtom, useAtomValue } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useQueryClient } from "@tanstack/react-query";
+import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
+import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
+import {
+  historyDrawerSelectionAtom,
+  currentHistorySelection,
+} from "@/features/page-versions/history-drawer-state";
+import type { VersionList } from "@/features/page-versions/history-types";
 import { historyAtoms } from "@/features/page-history/atoms/history-atoms.ts";
 import { useDisclosure, useHotkeys } from "@mantine/hooks";
 import { useClipboard } from "@/hooks/use-clipboard";
@@ -142,6 +157,10 @@ interface PageActionMenuProps {
 function PageActionMenu({ readOnly }: PageActionMenuProps) {
   const { t } = useTranslation();
   const [, setHistoryModalOpen] = useAtom(historyAtoms);
+  const client = useQueryClient();
+  const userId = useAtomValue(currentUserAtom)?.user?.id;
+  const setHistorySelection = useSetAtom(historyDrawerSelectionAtom);
+  const setAside = useSetAtom(asideStateAtom);
   const clipboard = useClipboard({ timeout: 500 });
   const { pageSlug, spaceSlug } = useParams();
   const { data: page, isLoading } = usePageQuery({
@@ -197,7 +216,16 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
   };
 
   const openHistoryModal = () => {
-    setHistoryModalOpen(true);
+    const status = client.getQueryData<VersionList>([
+      "sop-history-status",
+      userId,
+      page.id,
+    ]);
+    if (status?.enabled) {
+      setHistorySelection(currentHistorySelection(page.id, userId));
+      setAside({ tab: "history", isAsideOpen: true });
+    } else if (status?.enabled === false) setHistoryModalOpen(true);
+    else notifications.show({ message: "历史记录正在读取，请稍后重试" });
   };
 
   const handleDeletePage = () => {
@@ -254,7 +282,10 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
           <Menu.Item
             leftSection={
               isFavorited ? (
-                <IconStarFilled size={16} color="var(--mantine-color-yellow-5)" />
+                <IconStarFilled
+                  size={16}
+                  color="var(--mantine-color-yellow-5)"
+                />
               ) : (
                 <IconStar size={16} />
               )
@@ -423,37 +454,15 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
 function ConnectionWarning() {
   const { t } = useTranslation();
   const yjsConnectionStatus = useAtomValue(yjsConnectionStatusAtom);
-  const [showWarning, setShowWarning] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const isDisconnected = ["disconnected", "connecting"].includes(yjsConnectionStatus);
+  const [warning, setWarning] = useState({disconnected:isDisconnected,shown:false});
+  if (warning.disconnected !== isDisconnected) setWarning({disconnected:isDisconnected,shown:false});
   useEffect(() => {
-    const isDisconnected = ["disconnected", "connecting"].includes(
-      yjsConnectionStatus,
-    );
-
-    if (isDisconnected) {
-      if (!timeoutRef.current) {
-        timeoutRef.current = setTimeout(() => setShowWarning(true), 5000);
-      }
-    } else {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      setShowWarning(false);
-    }
-  }, [yjsConnectionStatus]);
-
-  // Cleanup only on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  if (!showWarning) return null;
+    if (!isDisconnected) return;
+    const timeout = setTimeout(() => setWarning({disconnected:true,shown:true}),5000);
+    return () => clearTimeout(timeout);
+  }, [isDisconnected]);
+  if (!isDisconnected || !warning.disconnected || !warning.shown) return null;
 
   return (
     <Tooltip

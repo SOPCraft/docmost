@@ -3,7 +3,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import SettingsSidebar from "@/components/settings/settings-sidebar.tsx";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
+import { historyDrawerSelectionAtom } from "@/features/page-versions/history-drawer-state";
 import {
   asideStateAtom,
   desktopSidebarAtom,
@@ -35,6 +36,7 @@ export default function GlobalAppShell({
   const toggleMobile = useToggleSidebar(mobileSidebarAtom);
   const [desktopOpened] = useAtom(desktopSidebarAtom);
   const [{ isAsideOpen, tab: asideTab }] = useAtom(asideStateAtom);
+  const historySelection = useAtomValue(historyDrawerSelectionAtom);
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
@@ -65,7 +67,7 @@ export default function GlobalAppShell({
         setSidebarWidth(newWidth);
       }
     },
-    [isResizing],
+    [isResizing, setSidebarWidth],
   );
 
   useEffect(() => {
@@ -89,86 +91,94 @@ export default function GlobalAppShell({
     <>
       <SkipToMain />
       <AppShell
-      header={{ height: 45 }}
-      navbar={{
-        width: isSpaceRoute ? sidebarWidth : 300,
-        breakpoint: "sm",
-        collapsed: {
-          mobile: !mobileOpened,
-          desktop: !desktopOpened,
-        },
-      }}
-      aside={
-        isPageRoute && {
-          width: 350,
+        header={{ height: 45 }}
+        navbar={{
+          width: isSpaceRoute ? sidebarWidth : 300,
           breakpoint: "sm",
-          collapsed: { mobile: !isAsideOpen, desktop: !isAsideOpen },
+          collapsed: {
+            mobile: !mobileOpened,
+            desktop: !desktopOpened,
+          },
+        }}
+        aside={
+          isPageRoute && {
+            width: 350,
+            breakpoint: "sm",
+            collapsed: {
+              mobile:
+                !isAsideOpen ||
+                (asideTab === "history" && !!historySelection?.mobileContent),
+              desktop: !isAsideOpen,
+            },
+          }
         }
-      }
-      padding="md"
-    >
-      <AppShell.Header px="md" className={classes.header}>
-        <AppHeader />
-      </AppShell.Header>
-      <AppShell.Navbar
-        className={classes.navbar}
-        withBorder={false}
-        ref={sidebarRef}
-        aria-label={
-          isSpaceRoute
-            ? t("Space navigation")
-            : isSettingsRoute
-              ? t("Settings navigation")
-              : isAiRoute
-                ? t("AI navigation")
-                : t("Main navigation")
-        }
+        padding="md"
       >
-        {isSpaceRoute && (
-          <div className={classes.resizeHandle} onMouseDown={startResizing} />
-        )}
-        {isSpaceRoute && <SpaceSidebar />}
-        {isSettingsRoute && <SettingsSidebar />}
-        {isAiRoute && (
-          <React.Suspense fallback={null}>
-            <AiChatSidebar />
-          </React.Suspense>
-        )}
-        {showGlobalSidebar && <GlobalSidebar />}
-      </AppShell.Navbar>
-      <AppShell.Main id={MAIN_CONTENT_ID} tabIndex={-1}>
-        {isSettingsRoute ? (
-          <Container size={900} pb={80}>
-            {children}
-          </Container>
-        ) : (
-          children
-        )}
-      </AppShell.Main>
-
-      {isPageRoute && (
-        <AppShell.Aside
-          id={ASIDE_PANEL_ID}
-          tabIndex={-1}
-          className={classes.aside}
-          p="md"
+        <AppShell.Header px="md" className={classes.header}>
+          <AppHeader />
+        </AppShell.Header>
+        <AppShell.Navbar
+          className={classes.navbar}
           withBorder={false}
+          ref={sidebarRef}
           aria-label={
-            asideTab === "comments"
-              ? t("Comments")
-              : asideTab === "toc"
-                ? t("Table of contents")
-                : asideTab === "chat"
-                  ? t("AI Chat")
-                  : asideTab === "details"
-                    ? t("Details")
-                    : undefined
+            isSpaceRoute
+              ? t("Space navigation")
+              : isSettingsRoute
+                ? t("Settings navigation")
+                : isAiRoute
+                  ? t("AI navigation")
+                  : t("Main navigation")
           }
         >
-          <Aside />
-        </AppShell.Aside>
-      )}
-    </AppShell>
+          {isSpaceRoute && (
+            <div className={classes.resizeHandle} onMouseDown={startResizing} />
+          )}
+          {isSpaceRoute && <SpaceSidebar />}
+          {isSettingsRoute && <SettingsSidebar />}
+          {isAiRoute && (
+            <React.Suspense fallback={null}>
+              <AiChatSidebar />
+            </React.Suspense>
+          )}
+          {showGlobalSidebar && <GlobalSidebar />}
+        </AppShell.Navbar>
+        <AppShell.Main id={MAIN_CONTENT_ID} tabIndex={-1}>
+          {isSettingsRoute ? (
+            <Container size={900} pb={80}>
+              {children}
+            </Container>
+          ) : (
+            children
+          )}
+        </AppShell.Main>
+
+        {isPageRoute && (
+          <AppShell.Aside
+            id={ASIDE_PANEL_ID}
+            tabIndex={-1}
+            className={classes.aside}
+            p={asideTab === "history" ? 0 : "md"}
+            data-history-drawer={asideTab === "history" ? "true" : undefined}
+            withBorder={false}
+            aria-label={
+              asideTab === "history"
+                ? "历史版本筛选与列表"
+                : asideTab === "comments"
+                  ? t("Comments")
+                  : asideTab === "toc"
+                    ? t("Table of contents")
+                    : asideTab === "chat"
+                      ? t("AI Chat")
+                      : asideTab === "details"
+                        ? t("Details")
+                        : undefined
+            }
+          >
+            <Aside />
+          </AppShell.Aside>
+        )}
+      </AppShell>
     </>
   );
 }

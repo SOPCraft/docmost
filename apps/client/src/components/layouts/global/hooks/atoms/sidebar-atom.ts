@@ -10,7 +10,7 @@ export const desktopSidebarAtom = atomWithWebStorage<boolean>(
 
 export const desktopAsideAtom = atom<boolean>(false);
 
-// Valid `tab` values: "" | "comments" | "toc" | "chat" | "details"
+// Valid `tab` values: "" | "comments" | "toc" | "chat" | "details" | "history"
 type AsideStateType = {
   tab: string;
   isAsideOpen: boolean;
@@ -21,4 +21,4 @@ export const asideStateAtom = atom<AsideStateType>({
   isAsideOpen: false,
 });
 
-export const sidebarWidthAtom = atomWithWebStorage<number>('sidebarWidth', 300);
+export const sidebarWidthAtom = atomWithWebStorage<number>("sidebarWidth", 300);

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAtom, useAtomValue } from "jotai";
 import {
   ActionIcon,
+  Button,
   Alert,
   Group,
   Loader,
@@ -34,11 +35,13 @@ export function VersionDetail({
   userId,
   row,
   olderRows,
+  onShowVersions,
 }: {
   pageId: string;
   userId: string;
   row: VersionRow;
   olderRows: VersionRow[];
+  onShowVersions?: () => void;
 }) {
   const [highlight, setHighlight] = useAtom(highlightChangesAtom);
   const counts = useAtomValue(diffCountsAtom);
@@ -102,7 +105,7 @@ export function VersionDetail({
       <div className={classes.toolbar}>
         <Group justify="space-between" gap="sm" wrap="wrap">
           <div>
-            <Text fw={600} size="sm" data-testid="history-baseline">
+            <Text fw={500} size="sm" data-testid="history-baseline">
               第 {row.revision} 版 · {baseLabel}
             </Text>
             <Text size="xs" c="dimmed">
@@ -110,6 +113,15 @@ export function VersionDetail({
               {row.actors.map((a) => a.name).join("、")}
             </Text>
           </div>
+          <Button
+            className={classes.mobileVersions}
+            color="gray"
+            size="compact-xs"
+            variant="subtle"
+            onClick={onShowVersions}
+          >
+            选择版本
+          </Button>
           <SegmentedControl
             size="xs"
             aria-label="历史显示方式"
@@ -201,7 +213,7 @@ export function VersionDetail({
                 >
                   <summary>
                     {summary.label}{" "}
-                    <span style={{ fontWeight: 400 }}>· 展开摘要</span>
+                    <span style={{ fontWeight: 400 }}>· 查看变更详情</span>
                   </summary>
                   <ul className={classes.summaryDetails}>
                     {summary.details.map((detail, index) => (
