@@ -4,7 +4,11 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import SettingsSidebar from "@/components/settings/settings-sidebar.tsx";
 import { useAtom, useAtomValue } from "jotai";
-import { historyDrawerSelectionAtom } from "@/features/page-versions/history-drawer-state";
+import {
+  historyDrawerSelectionAtom,
+  showMobileHistoryContent,
+} from "@/features/page-versions/history-drawer-state";
+import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import {
   asideStateAtom,
   desktopSidebarAtom,
@@ -37,6 +41,7 @@ export default function GlobalAppShell({
   const [desktopOpened] = useAtom(desktopSidebarAtom);
   const [{ isAsideOpen, tab: asideTab }] = useAtom(asideStateAtom);
   const historySelection = useAtomValue(historyDrawerSelectionAtom);
+  const historyUserId = useAtomValue(currentUserAtom)?.user?.id || "";
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
@@ -107,7 +112,12 @@ export default function GlobalAppShell({
             collapsed: {
               mobile:
                 !isAsideOpen ||
-                (asideTab === "history" && !!historySelection?.mobileContent),
+                (asideTab === "history" &&
+                  showMobileHistoryContent(
+                    historySelection,
+                    location.pathname,
+                    historyUserId,
+                  )),
               desktop: !isAsideOpen,
             },
           }

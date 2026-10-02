@@ -116,6 +116,7 @@ export function HistoryWorkspace({
       userId,
       row,
       mobileContent: mobile && !!row,
+      documentPath: location.pathname,
       returnScrollTop: active?.row ? active.returnScrollTop : window.scrollY,
       olderRows: row
         ? rows.filter((r) => r.revision < row.revision && r.status === "synced")

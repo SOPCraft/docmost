@@ -52,7 +52,10 @@ export default function Aside() {
 
   useEffect(() => {
     if (!isAsideOpen) return;
-    document.getElementById(ASIDE_PANEL_ID)?.focus();
+    const panel = document.getElementById(ASIDE_PANEL_ID);
+    if (tab === "history")
+      panel?.querySelector<HTMLElement>("[data-history-panel-body]")?.focus();
+    else panel?.focus();
   }, [isAsideOpen, tab]);
 
   let title: string;
@@ -87,6 +90,8 @@ export default function Aside() {
   return (
     <Box
       p="md"
+      tabIndex={tab === "history" ? -1 : undefined}
+      data-history-panel-body={tab === "history" ? "true" : undefined}
       onKeyDown={(e) => {
         if (tab === "history" && e.key === "Escape" && !e.defaultPrevented)
           closeAside();

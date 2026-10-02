@@ -7,6 +7,7 @@ export interface HistoryDrawerSelection {
   row: VersionRow | null;
   olderRows: VersionRow[];
   mobileContent: boolean;
+  documentPath?: string;
   returnScrollTop?: number;
 }
 export const historyDrawerSelectionAtom = atom<HistoryDrawerSelection>(
@@ -35,4 +36,18 @@ export function currentHistorySelection(
   userId: string,
 ): HistoryDrawerSelection {
   return { pageId, userId, row: null, olderRows: [], mobileContent: false };
+}
+
+export function showMobileHistoryContent(
+  state: HistoryDrawerSelection,
+  pathname: string,
+  userId: string,
+): boolean {
+  return (
+    !!state.row &&
+    !!state.mobileContent &&
+    !!userId &&
+    state.userId === userId &&
+    state.documentPath === pathname
+  );
 }
