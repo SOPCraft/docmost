@@ -1,4 +1,4 @@
-import { ReactNode, useLayoutEffect, useRef } from "react";
+import { ReactNode, useCallback, useLayoutEffect, useRef } from "react";
 import { Provider, useAtomValue, useSetAtom } from "jotai";
 import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
@@ -7,6 +7,10 @@ import {
   historyDrawerSelectionAtom,
 } from "./history-drawer-state";
 import { VersionDetail } from "./version-detail";
+import {
+  historyControlsHostAtom,
+  matchingControlsHost,
+} from "./history-controls-host";
 import classes from "./history-workspace.module.css";
 
 /** Never feed a historical snapshot to the live collaborative editor. Keep it mounted. */
@@ -17,10 +21,24 @@ export function HistoryPagePreview({
   pageId: string;
   children: ReactNode;
 }) {
-  const userId = useAtomValue(currentUserAtom)?.user?.id || "";
+  const user = useAtomValue(currentUserAtom)?.user;
+  const userId = user?.id || "";
+  const fullPageWidth = !!user?.settings?.preferences?.fullPageWidth;
   const aside = useAtomValue(asideStateAtom);
+  const setAside = useSetAtom(asideStateAtom);
+  const closeHistory = useCallback(() => {
+    setAside((old) =>
+      old.tab === "history" ? { ...old, isAsideOpen: false } : old,
+    );
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>('[data-testid="history-trigger"]')
+        ?.focus(),
+    );
+  }, [setAside]);
   const stored = useAtomValue(historyDrawerSelectionAtom);
-  const setStored = useSetAtom(historyDrawerSelectionAtom);
+  const host = useAtomValue(historyControlsHostAtom);
+  const controlsHost = matchingControlsHost(host, pageId, userId);
   const selected = activeHistorySelection(stored, aside, pageId, userId);
   const row = selected?.row;
   const showing = !!row;
@@ -52,9 +70,9 @@ export function HistoryPagePreview({
               userId={userId}
               row={row}
               olderRows={selected.olderRows}
-              onShowVersions={() =>
-                setStored((s) => (s ? { ...s, mobileContent: false } : null))
-              }
+              controlsHost={controlsHost}
+              fullPageWidth={fullPageWidth}
+              onCloseHistory={closeHistory}
             />
           </Provider>
         </section>

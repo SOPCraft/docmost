@@ -7,7 +7,7 @@
 }
 .preview {
   position: fixed;
-  top: calc(var(--app-shell-header-offset, 45px) + 45px);
+  top: var(--app-shell-header-offset, 45px);
   inset-inline-start: var(--app-shell-navbar-offset, 0px);
   inset-inline-end: var(--app-shell-aside-offset, 0px);
   bottom: 0;
@@ -18,40 +18,43 @@
   background: var(--mantine-color-body);
   color: var(--mantine-color-text);
 }
-.toolbar {
-  flex-shrink: 0;
-  padding: 8px 24px;
-  min-height: 88px;
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
-}
 .viewport {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 20px 0 48px;
+  padding: var(--app-shell-padding, var(--mantine-spacing-md));
+}
+.historicalDocument {
+  width: 100%;
 }
 .paper {
-  margin: 0 auto;
   width: 100%;
-  max-width: 900px;
-  padding: 0 48px;
   overflow-wrap: anywhere;
 }
-.summary {
-  margin-bottom: 16px;
-  color: var(--mantine-color-dimmed);
-  font-size: var(--mantine-font-size-xs);
-}
-.summary summary {
-  cursor: pointer;
-  font-weight: 400;
+.controls {
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
 }
 .summaryDetails {
-  margin: 8px 0 0;
-  padding-left: 18px;
+  margin: 0;
+  padding-left: 16px;
   line-height: 1.6;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+.drawerScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.datePopover {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
 }
 .current {
   flex-shrink: 0;
@@ -63,11 +66,6 @@
   border-bottom: 1px solid var(--mantine-color-default-border);
 }
 .timeline {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
   padding-bottom: 12px;
 }
 .dayToggle {
@@ -77,7 +75,7 @@
   font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-dimmed);
 }
-.row {
+.timeline .row {
   display: block;
   width: 100%;
   text-align: start;
@@ -108,25 +106,9 @@
   place-items: center;
   flex: 1;
 }
-.mobileVersions {
-  display: none;
-}
 @media (max-width: 47.99em) {
   .preview {
     inset-inline: 0;
-  }
-  .toolbar {
-    padding: 8px 12px;
-    min-height: 88px;
-  }
-  .paper {
-    padding: 0 16px;
-  }
-  .viewport {
-    padding-top: 16px;
-  }
-  .mobileVersions {
-    display: inline-flex;
   }
 }
 @media print {

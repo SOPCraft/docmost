@@ -1,13 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ActionIcon, Tooltip } from "@mantine/core";
+import { ActionIcon, Text, Tooltip } from "@mantine/core";
 import { IconHistory } from "@tabler/icons-react";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
+import { useMediaQuery } from "@mantine/hooks";
 import { ASIDE_PANEL_ID } from "@/hooks/use-toggle-aside";
 import api from "@/lib/api-client";
 import { VersionList } from "./history-types";
 import {
+  activeHistorySelection,
   currentHistorySelection,
   historyDrawerSelectionAtom,
 } from "./history-drawer-state";
@@ -30,6 +32,9 @@ function VersionHistoryEntry({
   userId: string;
 }) {
   const [aside, setAside] = useAtom(asideStateAtom);
+  const stored = useAtomValue(historyDrawerSelectionAtom);
+  const selected = activeHistorySelection(stored, aside, pageId, userId);
+  const mobile = useMediaQuery("(max-width:47.99em)");
   const setSelection = useSetAtom(historyDrawerSelectionAtom);
   const opened = aside.isAsideOpen && aside.tab === "history";
   const status = useQuery({
@@ -49,25 +54,54 @@ function VersionHistoryEntry({
   });
   if (!status.isError && !status.data?.enabled) return null;
   return (
-    <Tooltip
-      label={status.isError ? "历史记录暂不可用，点击重试" : "历史版本"}
-      openDelay={250}
-      withArrow
-    >
-      <ActionIcon
-        variant="subtle"
-        color="dark"
-        aria-label="历史版本"
-        aria-controls={ASIDE_PANEL_ID}
-        aria-expanded={opened}
-        data-testid="history-trigger"
-        onClick={() => {
-          setSelection(currentHistorySelection(pageId, userId));
-          setAside({ tab: "history", isAsideOpen: !opened });
-        }}
+    <>
+      {selected?.row && (
+        <Text
+          component="span"
+          size="xs"
+          c="dimmed"
+          visibleFrom="sm"
+          style={{ whiteSpace: "nowrap" }}
+          data-testid="history-preview-status"
+        >
+          历史预览 · 第{selected.row.revision}版
+        </Text>
+      )}
+      <Tooltip
+        label={
+          status.isError
+            ? "历史记录暂不可用，点击重试"
+            : mobile && selected?.row
+              ? "选择版本"
+              : "历史版本"
+        }
+        openDelay={250}
+        withArrow
       >
-        <IconHistory size={20} stroke={2} />
-      </ActionIcon>
-    </Tooltip>
+        <ActionIcon
+          variant="subtle"
+          color="dark"
+          aria-label="历史版本"
+          aria-description={
+            selected?.row
+              ? `历史预览，第${selected.row.revision}版，点击选择版本`
+              : undefined
+          }
+          aria-controls={ASIDE_PANEL_ID}
+          aria-expanded={opened}
+          data-testid="history-trigger"
+          onClick={() => {
+            if (mobile && opened && selected?.mobileContent) {
+              setSelection((s) => ({ ...s, mobileContent: false }));
+              return;
+            }
+            setSelection(currentHistorySelection(pageId, userId));
+            setAside({ tab: "history", isAsideOpen: !opened });
+          }}
+        >
+          <IconHistory size={20} stroke={2} />
+        </ActionIcon>
+      </Tooltip>
+    </>
   );
 }
