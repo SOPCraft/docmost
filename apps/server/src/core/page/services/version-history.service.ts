@@ -1,4 +1,9 @@
 import {
+  HistoryFilters,
+  validateHistoryFilters,
+} from '../../../integrations/versioning/history-filters';
+import { summarizeHistory } from '../../../integrations/versioning/history-summary';
+import {
   Injectable,
   NotFoundException,
   ConflictException,
@@ -56,25 +61,164 @@ export class VersionHistoryService {
     }
     return page;
   }
-  async list(pageId: string, user: User, before?: number) {
+  async list(
+    pageId: string,
+    user: User,
+    before?: number,
+    input: HistoryFilters = {},
+  ) {
+    const filters = validateHistoryFilters(input, before);
     const page = await this.authorize(pageId, user);
     if (!readVersioningConfig().enabled)
-      return { enabled: false, items: [], hasMore: false };
+      return { enabled: false, items: [], hasMore: false, total: 0 };
+    const scope = sql`v.workspace_id=${user.workspaceId}::uuid AND v.space_id=${page.spaceId}::uuid AND v.page_id=${page.id}::uuid`;
+    const predicate = sql`${scope}
+      ${filters.from ? sql`AND v.created_at >= ${filters.from}::timestamptz` : sql``}
+      ${filters.until ? sql`AND v.created_at < ${filters.until}::timestamptz` : sql``}
+      ${filters.actorId ? sql`AND v.snapshot->'actors' @> ${JSON.stringify([{ id: filters.actorId }])}::text::jsonb` : sql``}`;
+    const include = filters.summaries !== false;
+    const safePage = (
+      alias: string,
+    ) => sql`CASE WHEN octet_length(${sql.ref(alias + '.snapshot')}::text) < 128000 THEN ${sql.ref(alias + '.snapshot')}->'page'
+      ELSE (${sql.ref(alias + '.snapshot')}->'page') - 'content' - 'ydocBase64' END`;
     const rows = (
-      await sql<any>`SELECT id, revision, status, attempts, commit_sha, created_at, synced_at,
-      last_error_code, snapshot->'actors' AS actors, snapshot->>'scope' AS scope,
-      snapshot->'exclusions' AS exclusions FROM sop_page_versions
-      WHERE workspace_id=${user.workspaceId}::uuid AND space_id=${page.spaceId}::uuid AND page_id=${page.id}::uuid
-        ${before ? sql`AND revision < ${before}` : sql``}
-      ORDER BY revision DESC LIMIT 31`.execute(this.db)
+      await sql<any>`SELECT v.id, v.revision, v.status, v.attempts, v.commit_sha, v.created_at, v.synced_at,
+      v.last_error_code, v.snapshot->'actors' AS actors, v.snapshot->>'scope' AS scope, v.snapshot->'exclusions' AS exclusions
+      ${
+        include
+          ? sql`, ${safePage('v')} AS summary_page, ${safePage('p')} AS previous_page, p.id AS previous_id, p.revision AS previous_revision,
+        (octet_length(v.snapshot::text) >= 128000 OR coalesce(octet_length(p.snapshot::text),0) >= 128000) AS summary_limited`
+          : sql``
+      }
+      FROM sop_page_versions v
+      ${
+        include
+          ? sql`LEFT JOIN sop_page_versions p ON p.workspace_id=v.workspace_id AND p.space_id=v.space_id
+        AND p.page_id=v.page_id AND p.revision=v.revision-1`
+          : sql``
+      }
+      WHERE ${predicate} ${before ? sql`AND v.revision < ${before}` : sql``}
+      ORDER BY v.revision DESC LIMIT 31`.execute(this.db)
     ).rows;
+    const count = (
+      await sql<{
+        total: number;
+      }>`SELECT count(*)::integer AS total FROM sop_page_versions v WHERE ${predicate}`.execute(
+        this.db,
+      )
+    ).rows[0].total;
     const checked = await this.authorize(page.id, user);
     if (checked.spaceId !== page.spaceId)
       throw new ConflictException('Page location changed');
+    const items = rows
+      .slice(0, 30)
+      .map(
+        ({
+          summaryPage,
+          previousPage,
+          summaryLimited,
+          previousId,
+          previousRevision,
+          ...row
+        }) => ({
+          ...row,
+          ...(include
+            ? {
+                previousId,
+                previousRevision,
+                summary:
+                  row.revision > 1 && !previousId
+                    ? {
+                        label: '比较基准缺失',
+                        details: ['未找到同文档上一版，不能推断变化。'],
+                        added: null,
+                        deleted: null,
+                        limited: true,
+                        metadataChanged: false,
+                        structureChanged: false,
+                      }
+                    : summarizeHistory(
+                        summaryPage,
+                        previousPage,
+                        summaryLimited,
+                      ),
+              }
+            : {}),
+        }),
+      );
+    return { enabled: true, items, hasMore: rows.length > 30, total: count };
+  }
+  async options(pageId: string, user: User) {
+    const page = await this.authorize(pageId, user);
+    if (!readVersioningConfig().enabled)
+      return { actors: [], firstAt: null, lastAt: null };
+    const actors = (
+      await sql<{
+        id: string;
+        name: string;
+      }>`SELECT DISTINCT ON (a->>'id') a->>'id' AS id, a->>'name' AS name
+      FROM sop_page_versions v CROSS JOIN LATERAL jsonb_array_elements(v.snapshot->'actors') a
+      WHERE v.workspace_id=${user.workspaceId}::uuid AND v.space_id=${page.spaceId}::uuid AND v.page_id=${page.id}::uuid
+      ORDER BY a->>'id', v.revision DESC`.execute(this.db)
+    ).rows;
+    const dates = (
+      await sql<{
+        firstAt: Date | null;
+        lastAt: Date | null;
+      }>`SELECT min(created_at) AS first_at, max(created_at) AS last_at
+      FROM sop_page_versions WHERE workspace_id=${user.workspaceId}::uuid AND space_id=${page.spaceId}::uuid AND page_id=${page.id}::uuid`.execute(
+        this.db,
+      )
+    ).rows[0];
+    const checked = await this.authorize(page.id, user);
+    if (checked.spaceId !== page.spaceId)
+      throw new ConflictException('Page location changed');
+    return { actors, ...dates };
+  }
+  async compare(
+    pageId: string,
+    versionId: string,
+    user: User,
+    baseVersionId?: string,
+  ) {
+    const current = await this.read(pageId, versionId, user);
+    const page = await this.authorize(pageId, user);
+    const selected = (
+      await sql<{
+        id: string;
+        revision: number;
+        page: any;
+      }>`SELECT id, revision, snapshot->'page' AS page FROM sop_page_versions
+      WHERE id=${versionId}::uuid AND page_id=${page.id}::uuid AND space_id=${page.spaceId}::uuid AND workspace_id=${user.workspaceId}::uuid`.execute(
+        this.db,
+      )
+    ).rows[0];
+    if (!selected) throw new NotFoundException('Version not found');
+    const base =
+      current.revision === 1 && !baseVersionId
+        ? null
+        : (
+            await sql<{
+              id: string;
+              revision: number;
+              page: any;
+            }>`SELECT id, revision, snapshot->'page' AS page FROM sop_page_versions
+      WHERE page_id=${page.id}::uuid AND space_id=${page.spaceId}::uuid AND workspace_id=${user.workspaceId}::uuid
+      AND ${baseVersionId ? sql`id=${baseVersionId}::uuid AND revision<${current.revision}` : sql`revision=${current.revision - 1}`}`.execute(
+              this.db,
+            )
+          ).rows[0];
+    if (!base && (current.revision > 1 || baseVersionId))
+      throw new ConflictException('Comparison baseline unavailable');
+    const previous = base ? await this.read(pageId, base.id, user) : null;
+    const checked = await this.authorize(pageId, user);
+    if (checked.spaceId !== page.spaceId)
+      throw new ConflictException('Page location changed');
     return {
-      enabled: true,
-      items: rows.slice(0, 30),
-      hasMore: rows.length > 30,
+      current,
+      previous,
+      summary: summarizeHistory(selected.page, base?.page || null),
+      baseline: base ? { id: base.id, revision: base.revision } : null,
     };
   }
   async read(pageId: string, versionId: string, user: User) {

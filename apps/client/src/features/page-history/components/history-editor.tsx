@@ -18,12 +18,14 @@ export interface HistoryEditorProps {
   title: string;
   content: any;
   previousContent?: any;
+  onDiffError?: (failed: boolean) => void;
 }
 
 export function HistoryEditor({
   title,
   content,
   previousContent,
+  onDiffError,
 }: HistoryEditorProps) {
   const [highlightChanges] = useAtom(highlightChangesAtom);
   const [, setDiffCounts] = useAtom(diffCountsAtom);
@@ -32,11 +34,13 @@ export function HistoryEditor({
     extensions: mainExtensions,
     editable: false,
     textDirection: "auto",
+    editorProps: { attributes: { "aria-label": "历史版本正文" } },
   });
 
   useEffect(() => {
     if (!editor || editor.isDestroyed || !content) return;
 
+    onDiffError?.(false);
     let decorationSet = DecorationSet.empty;
     let addedCount = 0;
     let deletedCount = 0;
@@ -163,6 +167,9 @@ export function HistoryEditor({
 
         decorationSet = DecorationSet.create(newContent, decorations);
       } catch (e) {
+        addedCount = 0;
+        deletedCount = 0;
+        onDiffError?.(true);
         console.error("History diff failed:", e);
         editor.commands.setContent(content);
       }
@@ -187,6 +194,7 @@ export function HistoryEditor({
     previousContent,
     highlightChanges,
     setDiffCounts,
+    onDiffError,
   ]);
 
   return (

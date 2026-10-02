@@ -1,3 +1,4 @@
+import { buildPageSnapshot } from './version-snapshot';
 import { PageService } from '../../core/page/services/page.service';
 import { VersionedTrashService } from '../../core/page/services/versioned-trash.service';
 import { PageRepo } from '../../database/repos/page/page.repo';
@@ -648,6 +649,182 @@ const testUrl = process.env.SOP_CAPTURE_TEST_DATABASE_URL;
         service.movePageToSpace(root, randomUUID(), actorA),
       ).rejects.toThrow('transfer');
       expect(await rows()).toHaveLength(1);
+    });
+    const seedHistory = async (
+      id: string,
+      revision: number,
+      when: string,
+      actorIds: string[],
+      text = '测试正文',
+    ) => {
+      const source = await db
+        .selectFrom('pages')
+        .selectAll()
+        .where('id', '=', id)
+        .executeTakeFirst();
+      const actors = await db
+        .selectFrom('users')
+        .select(['id', 'name'])
+        .where('id', 'in', actorIds)
+        .execute();
+      const snapshot = buildPageSnapshot(
+        {
+          ...source,
+          content: {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+          },
+        } as any,
+        actors,
+      );
+      const key = randomUUID();
+      await sql`INSERT INTO sop_page_versions(id,workspace_id,space_id,page_id,revision,snapshot,snapshot_sha256,created_at)
+        VALUES(${key}::uuid,${workspaceId}::uuid,${spaceId}::uuid,${id}::uuid,${revision},${snapshot.json}::text::jsonb,${snapshot.sha256},${when}::timestamptz)`.execute(
+        db,
+      );
+      return key;
+    };
+    it('filters all history rather than only the most recent thirty records', async () => {
+      const id = await page();
+      for (let n = 1; n <= 36; n++)
+        await seedHistory(
+          id,
+          n,
+          '2026-10-02T01:00:00Z',
+          n < 4 ? [actorA] : [actorB],
+        );
+      const { service } = historyFor();
+      const first = await service.list(id, viewer());
+      expect(first.items).toHaveLength(30);
+      expect(first.hasMore).toBe(true);
+      expect(first.total).toBe(36);
+      const filtered = await service.list(id, viewer(), undefined, {
+        actorId: actorA,
+      });
+      expect(filtered.items.map((v) => v.revision)).toEqual([3, 2, 1]);
+      const options = await service.options(id, viewer());
+      expect(options.actors.map((a) => a.id).sort()).toEqual(
+        [actorA, actorB].sort(),
+      );
+      expect(
+        (await service.list(id, viewer(), 7)).items.map((v) => v.revision),
+      ).toEqual([6, 5, 4, 3, 2, 1]);
+    });
+    it('uses inclusive start and exclusive end across a local midnight', async () => {
+      const id = await page();
+      await seedHistory(id, 1, '2026-10-01T15:59:59Z', [actorA]);
+      await seedHistory(id, 2, '2026-10-01T16:00:00Z', [actorA, actorB]);
+      await seedHistory(id, 3, '2026-10-02T15:59:59Z', [actorB]);
+      await seedHistory(id, 4, '2026-10-02T16:00:00Z', [actorB]);
+      const { service } = historyFor();
+      const result = await service.list(id, viewer(), undefined, {
+        from: '2026-10-02T00:00:00+08:00',
+        until: '2026-10-03T00:00:00+08:00',
+        actorId: actorB,
+      });
+      expect(result.items.map((v) => v.revision)).toEqual([3, 2]);
+      expect(result.total).toBe(2);
+      expect(
+        (
+          await service.list(id, viewer(), undefined, {
+            from: '2026-09-01T00:00:00Z',
+            until: '2026-09-02T00:00:00Z',
+          })
+        ).items,
+      ).toEqual([]);
+    });
+    it('summary baseline remains the immediately preceding revision after author filtering', async () => {
+      const id = await page();
+      await seedHistory(id, 1, '2026-10-01T00:00:00Z', [actorA], '原文');
+      await seedHistory(id, 2, '2026-10-01T00:01:00Z', [actorB], '原文乙修改');
+      await seedHistory(
+        id,
+        3,
+        '2026-10-01T00:02:00Z',
+        [actorA],
+        '原文乙修改甲补充',
+      );
+      const result = await historyFor().service.list(id, viewer(), undefined, {
+        actorId: actorA,
+      });
+      expect(result.items.map((v) => v.revision)).toEqual([3, 1]);
+      expect(result.items[0].previousRevision).toBe(2);
+      expect(result.items[0].summary.details).toContain('新增：「甲补充」');
+      expect(result.items[0].summary.details.join('')).not.toContain('乙修改');
+    });
+    it('detects a missing predecessor rather than treating it as the first version', async () => {
+      const id = await page();
+      await seedHistory(id, 3, '2026-10-01T00:02:00Z', [actorA]);
+      const result = await historyFor().service.list(id, viewer());
+      expect(result.items[0].summary.label).toBe('比较基准缺失');
+    });
+    it('can poll status without extracting summary bodies', async () => {
+      const id = await page();
+      await save(id);
+      const result = await historyFor().service.list(id, viewer(), undefined, {
+        summaries: false,
+      });
+      expect(result.items[0]).not.toHaveProperty('summary');
+      expect(result.items[0]).not.toHaveProperty('summaryPage');
+    });
+    it('enforces authorization on contributor/date options after querying', async () => {
+      const id = await page();
+      await save(id);
+      const permission = jest
+        .fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('revoked'));
+      await expect(
+        historyFor(permission).service.options(id, viewer()),
+      ).rejects.toThrow('revoked');
+    });
+    it('compares verified fixed revisions with an unfiltered predecessor or explicit baseline', async () => {
+      const id = await page();
+      const first = await save(id);
+      await worker.tick();
+      await db
+        .updateTable('pages')
+        .set({ title: '第二稿' })
+        .where('id', '=', id)
+        .execute();
+      const second = await save(id, [actorB]);
+      await worker.tick();
+      await db
+        .updateTable('pages')
+        .set({ title: '第三稿' })
+        .where('id', '=', id)
+        .execute();
+      const third = await save(id);
+      await worker.tick();
+      const service = historyFor().service;
+      const normal = await service.compare(id, third.id, viewer());
+      expect(normal.baseline.revision).toBe(2);
+      expect(normal.previous.id).toBe(second.id);
+      expect(normal.summary.label).toContain('修改标题');
+      const custom = await service.compare(id, third.id, viewer(), first.id);
+      expect(custom.baseline.revision).toBe(1);
+      const initial = await service.compare(id, first.id, viewer());
+      expect(initial.previous).toBeNull();
+      await expect(
+        service.compare(id, third.id, viewer(), third.id),
+      ).rejects.toThrow('baseline');
+      await expect(
+        service.compare(id, third.id, viewer(), randomUUID()),
+      ).rejects.toThrow('baseline');
+    });
+    it('does not render a comparison when the real baseline bytes are missing', async () => {
+      const id = await page();
+      const first = await save(id);
+      await worker.tick();
+      const second = await save(id);
+      await worker.tick();
+      const firstRow = (await rows())[0];
+      repo()
+        .commits.get(firstRow.commitSha)
+        .tree.delete(`.sop/versions/${first.id}.json`);
+      await expect(
+        historyFor().service.compare(id, second.id, viewer()),
+      ).rejects.toThrow('unavailable or invalid');
     });
   },
 );
