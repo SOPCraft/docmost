@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
-import { Button, Stack, Text, Tooltip } from "@mantine/core";
+import { Button, Group, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   localDateKey,
   timeLabel,
   VersionRow,
   statusLabels,
 } from "./history-types";
+import { HistoryChangePreview } from "./history-change-snippet";
+import { summaryPreview } from "./history-summary-preview";
+import native from "@/features/page-history/components/css/history.module.css";
 import classes from "./history-workspace.module.css";
 
 export function VersionTimeline({
@@ -25,12 +28,12 @@ export function VersionTimeline({
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => {
-    const result = new Map<string, VersionRow[]>();
+    const values = new Map<string, VersionRow[]>();
     for (const row of rows) {
-      const key = localDateKey(row.createdAt);
-      result.set(key, [...(result.get(key) || []), row]);
+      const date = localDateKey(row.createdAt);
+      values.set(date, [...(values.get(date) || []), row]);
     }
-    return Array.from(result);
+    return Array.from(values);
   }, [rows]);
   return (
     <div
@@ -39,8 +42,8 @@ export function VersionTimeline({
       aria-label="版本时间列表"
     >
       {groups.map(([date, versions]) => (
-        <section className={classes.day} key={date}>
-          <button
+        <section key={date}>
+          <UnstyledButton
             className={classes.dayToggle}
             aria-expanded={!collapsed.has(date)}
             onClick={() =>
@@ -52,77 +55,80 @@ export function VersionTimeline({
               })
             }
           >
-            {collapsed.has(date) ? "▸" : "▾"} {date}{" "}
-            <span style={{ fontWeight: 400 }}>
-              · 已加载 {versions.length} 条
-            </span>
-          </button>
+            {collapsed.has(date) ? "▸" : "▾"} {date}
+          </UnstyledButton>
           {!collapsed.has(date) &&
-            versions.map((row) => (
-              <Tooltip
-                key={row.id}
-                position="left"
-                multiline
-                w={310}
-                withArrow
-                openDelay={250}
-                events={{ hover: true, focus: true, touch: false }}
-                label={
-                  <Stack gap={4}>
-                    <Text size="xs" fw={600}>
-                      {localDateKey(row.createdAt)} {timeLabel(row.createdAt)} ·
-                      第 {row.revision} 版
-                    </Text>
-                    <Text size="xs">
+            versions.map((row) => {
+              const preview = summaryPreview(row.summary);
+              return (
+                <Tooltip
+                  key={row.id}
+                  position="bottom-end"
+                  floatingStrategy="fixed"
+                  middlewares={{
+                    flip: {
+                      fallbackPlacements: ["top-end"],
+                      fallbackAxisSideDirection: "none",
+                    },
+                    shift: { padding: 8, crossAxis: false },
+                  }}
+                  data-testid="history-hover-preview"
+                  data-preview-revision={row.revision}
+                  multiline
+                  w="min(248px, calc(100vw - 40px))"
+                  color="var(--mantine-color-body)"
+                  classNames={{ tooltip: classes.summaryPopover }}
+                  openDelay={400}
+                  closeDelay={100}
+                  events={{ hover: true, focus: true, touch: false }}
+                  label={<HistoryChangePreview summary={row.summary} />}
+                >
+                  <UnstyledButton
+                    className={[
+                      native.history,
+                      native.historyButton,
+                      classes.row,
+                      row.id === selected ? native.active : "",
+                    ].join(" ")}
+                    type="button"
+                    data-version-id={row.id}
+                    data-revision={row.revision}
+                    aria-label={`第${row.revision}版 ${date} ${timeLabel(row.createdAt)} ${row.actors.map((a) => a.name).join("、")}`}
+                    aria-pressed={row.id === selected}
+                    disabled={row.status !== "synced"}
+                    onClick={() => onSelect(row.id)}
+                  >
+                    <Group justify="space-between" gap="xs" wrap="nowrap">
+                      <Text size="sm">
+                        <time dateTime={row.createdAt}>
+                          {timeLabel(row.createdAt)}
+                        </time>
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        第 {row.revision} 版
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" lineClamp={1} mt={2}>
                       {row.actors.map((a) => a.name).join("、")}
                     </Text>
-                    <Text size="xs">
-                      {row.summary?.label || statusLabels[row.status]}
+                    <Text size="xs" lineClamp={1} mt={4}>
+                      {row.status === "synced"
+                        ? preview.brief
+                        : statusLabels[row.status] || "状态未知"}
                     </Text>
-                    {row.summary?.details.map((detail, i) => (
-                      <Text size="xs" key={i}>
-                        {detail}
-                      </Text>
-                    ))}
-                  </Stack>
-                }
-              >
-                <button
-                  type="button"
-                  className={classes.row}
-                  data-version-id={row.id}
-                  data-revision={row.revision}
-                  aria-label={`第${row.revision}版 ${date} ${timeLabel(row.createdAt)} ${row.actors.map((a) => a.name).join("、")}`}
-                  aria-pressed={row.id === selected}
-                  disabled={row.status !== "synced"}
-                  onClick={() => onSelect(row.id)}
-                >
-                  <div className={classes.rowTime}>
-                    <time dateTime={row.createdAt}>
-                      {timeLabel(row.createdAt)}
-                    </time>
-                    <span className={classes.rowRevision}>
-                      第 {row.revision} 版
-                    </span>
-                  </div>
-                  <div className={classes.rowActors}>
-                    {row.actors.map((a) => a.name).join("、")}
-                  </div>
-                  <div className={classes.rowSummary}>
-                    {row.status === "synced"
-                      ? row.summary?.label || "查看此版本"
-                      : statusLabels[row.status] || "状态未知"}
-                  </div>
-                </button>
-              </Tooltip>
-            ))}
+                  </UnstyledButton>
+                </Tooltip>
+              );
+            })}
         </section>
       ))}
       {hasMore && (
         <Button
           fullWidth
           variant="subtle"
-          mt="md"
+          color="gray"
+          size="xs"
+          mt="xs"
           onClick={onMore}
           loading={loading}
         >

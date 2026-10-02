@@ -1,4 +1,11 @@
-import { ActionIcon, Box, Group, ScrollArea, Title, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Box,
+  Group,
+  ScrollArea,
+  Title,
+  Tooltip,
+} from "@mantine/core";
 import { IconX } from "@tabler/icons-react";
 import { useAtom } from "jotai";
 import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom.ts";
@@ -12,9 +19,9 @@ const CommentListWithTabs = lazy(
   () => import("@/features/comment/components/comment-list-with-tabs.tsx"),
 );
 const TableOfContents = lazy(() =>
-  import(
-    "@/features/editor/components/table-of-contents/table-of-contents.tsx"
-  ).then((m) => ({ default: m.TableOfContents })),
+  import("@/features/editor/components/table-of-contents/table-of-contents.tsx").then(
+    (m) => ({ default: m.TableOfContents }),
+  ),
 );
 const AsideChatPanel = lazy(
   () => import("@/ee/ai-chat/components/aside-chat-panel"),
@@ -25,21 +32,40 @@ const PageDetailsAside = lazy(() =>
   ),
 );
 
+const HistorySidebar = lazy(
+  () => import("@/features/page-versions/history-sidebar"),
+);
+
 export default function Aside() {
   const [{ tab, isAsideOpen }, setAsideState] = useAtom(asideStateAtom);
   const { t } = useTranslation();
   const pageEditor = useAtomValue(pageEditorAtom);
-  const closeAside = () => setAsideState((s) => ({ ...s, isAsideOpen: false }));
+  const closeAside = () => {
+    setAsideState((s) => ({ ...s, isAsideOpen: false }));
+    if (tab === "history")
+      requestAnimationFrame(() =>
+        document
+          .querySelector<HTMLElement>('[data-testid="history-trigger"]')
+          ?.focus(),
+      );
+  };
 
   useEffect(() => {
     if (!isAsideOpen) return;
-    document.getElementById(ASIDE_PANEL_ID)?.focus();
+    const panel = document.getElementById(ASIDE_PANEL_ID);
+    if (tab === "history")
+      panel?.querySelector<HTMLElement>("[data-history-panel-body]")?.focus();
+    else panel?.focus();
   }, [isAsideOpen, tab]);
 
   let title: string;
   let component: ReactNode;
 
   switch (tab) {
+    case "history":
+      component = isAsideOpen ? <HistorySidebar /> : null;
+      title = "Page history";
+      break;
     case "comments":
       component = <CommentListWithTabs />;
       title = "Comments";
@@ -62,12 +88,28 @@ export default function Aside() {
   }
 
   return (
-    <Box p="md" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <Box
+      p="md"
+      tabIndex={tab === "history" ? -1 : undefined}
+      data-history-panel-body={tab === "history" ? "true" : undefined}
+      onKeyDown={(e) => {
+        if (tab === "history" && e.key === "Escape" && !e.defaultPrevented)
+          closeAside();
+      }}
+      style={{
+        height: "100%",
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       {component && (
         <>
           {tab !== "chat" && (
             <Group justify="space-between" wrap="nowrap" mb="md">
-              <Title order={2} size="h6" fw={500}>{t(title)}</Title>
+              <Title order={2} size="h6" fw={500}>
+                {t(title)}
+              </Title>
               <Tooltip label={t("Close")} withArrow>
                 <ActionIcon
                   variant="subtle"
@@ -82,7 +124,7 @@ export default function Aside() {
           )}
 
           <Suspense fallback={null}>
-            {tab === "comments" || tab === "chat" ? (
+            {tab === "comments" || tab === "chat" || tab === "history" ? (
               component
             ) : (
               <ScrollArea

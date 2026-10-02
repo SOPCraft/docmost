@@ -39,21 +39,6 @@
     padding: 0 !important;
   }
 
-  & :global(.history-diff-added) {
-    background: light-dark(#e1f3f2, #01654a) !important;
-    color: light-dark(#007b69, #cafff7) !important;
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
-  }
-
-  & :global(.history-diff-deleted) {
-    text-decoration: line-through;
-    color: light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4));
-    background: light-dark(var(--mantine-color-red-0), rgba(255, 0, 0, 0.1));
-    border-radius: rem(2px);
-    padding: 0 rem(2px);
-  }
-
   & :global(.history-diff-node-added) {
     outline: rem(2px) solid
       light-dark(var(--mantine-color-teal-5), var(--mantine-color-teal-7));
@@ -103,4 +88,29 @@
 .compareBanner {
   border-bottom: rem(1px) solid
     light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+}
+
+/* Optional document layout shares the native rich-text body inset. */
+.pageHistoryBody {
+  padding-inline: 3rem;
+  @media (max-width: $mantine-breakpoint-sm) {
+    padding-inline: 1rem;
+  }
+}
+
+/* One palette for document differences and compact history previews. */
+.historyEditor :global(.history-diff-added),
+.changeAdded {
+  background: light-dark(#e1f3f2, #01654a) !important;
+  color: light-dark(#007b69, #cafff7) !important;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.historyEditor :global(.history-diff-deleted),
+.changeDeleted {
+  text-decoration: line-through;
+  color: light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4));
+  background: light-dark(var(--mantine-color-red-0), rgba(255, 0, 0, 0.1));
+  border-radius: rem(2px);
+  padding: 0 rem(2px);
 }

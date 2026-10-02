@@ -16,6 +16,7 @@ import {
 
 export interface HistoryEditorProps {
   title: string;
+  pageLayout?: boolean;
   content: any;
   previousContent?: any;
   onDiffError?: (failed: boolean) => void;
@@ -26,6 +27,7 @@ export function HistoryEditor({
   content,
   previousContent,
   onDiffError,
+  pageLayout = false,
 }: HistoryEditorProps) {
   const [highlightChanges] = useAtom(highlightChangesAtom);
   const [, setDiffCounts] = useAtom(diffCountsAtom);
@@ -199,11 +201,22 @@ export function HistoryEditor({
 
   return (
     <div>
-      <Title order={1}>{title}</Title>
+      {pageLayout ? (
+        <div className="page-title">
+          <div className="ProseMirror">
+            <h1 dir="auto">{title}</h1>
+          </div>
+        </div>
+      ) : (
+        <Title order={1}>{title}</Title>
+      )}
       {editor && (
         <EditorContent
           editor={editor}
-          className={historyClasses.historyEditor}
+          className={[
+            historyClasses.historyEditor,
+            pageLayout ? historyClasses.pageHistoryBody : "",
+          ].join(" ")}
         />
       )}
     </div>

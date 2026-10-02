@@ -8,6 +8,7 @@ import { diffCountsAtom } from "@/features/page-history/atoms/history-atoms";
  */
 export function useDiffNavigation(
   scrollViewportRef: RefObject<HTMLDivElement>,
+  autoScroll = true,
 ) {
   const diffCounts = useAtomValue(diffCountsAtom);
   const [selection, setSelection] = useState<{
@@ -41,11 +42,11 @@ export function useDiffNavigation(
   );
 
   useEffect(() => {
-    if (diffCounts && diffCounts.total > 0) {
+    if (autoScroll && diffCounts && diffCounts.total > 0) {
       const frame = requestAnimationFrame(() => scrollToChangeIndex(1));
       return () => cancelAnimationFrame(frame);
     }
-  }, [diffCounts, scrollToChangeIndex]);
+  }, [diffCounts, scrollToChangeIndex, autoScroll]);
 
   const handlePrevChange = useCallback(() => {
     if (!diffCounts || diffCounts.total === 0) return;

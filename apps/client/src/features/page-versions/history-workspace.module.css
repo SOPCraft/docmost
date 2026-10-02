@@ -1,212 +1,142 @@
-.workspace {
-  height: 100dvh;
+/* Geometry only; colors, controls, row selection and rich-text diff reuse native components. */
+.drawer {
   display: flex;
   flex-direction: column;
-  background: var(--mantine-color-body);
-  color: var(--mantine-color-text);
-}
-.header {
-  min-height: 60px;
-  padding: 12px 20px;
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  flex-shrink: 0;
-}
-.layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
   min-height: 0;
   flex: 1;
 }
-.main {
+.preview {
+  position: fixed;
+  top: var(--app-shell-header-offset, 45px);
+  inset-inline-start: var(--app-shell-navbar-offset, 0px);
+  inset-inline-end: var(--app-shell-aside-offset, 0px);
+  bottom: 0;
+  z-index: 90;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  background: light-dark(#f6f7f9, var(--mantine-color-dark-8));
-}
-.toolbar {
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--mantine-color-default-border);
   background: var(--mantine-color-body);
-  flex-shrink: 0;
+  color: var(--mantine-color-text);
 }
 .viewport {
   position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 28px 32px 72px;
+  padding: var(--app-shell-padding, var(--mantine-spacing-md));
+}
+.historicalDocument {
+  width: 100%;
 }
 .paper {
-  margin: 0 auto;
-  max-width: 900px;
-  min-height: 100%;
-  padding: 36px 42px;
-  background: var(--mantine-color-body);
-  border: 1px solid var(--mantine-color-default-border);
-  border-radius: 8px;
-  box-shadow: 0 4px 22px rgba(0, 0, 0, 0.035);
+  width: 100%;
   overflow-wrap: anywhere;
 }
-.summary {
-  margin-bottom: 22px;
-  padding: 12px 16px;
-  background: light-dark(#f7f9fc, var(--mantine-color-dark-6));
-  border-radius: 6px;
-  border-left: 3px solid var(--mantine-color-blue-5);
-  font-size: 13px;
-}
-.summary summary {
-  cursor: pointer;
-  font-weight: 500;
-}
-.summaryDetails {
-  margin: 10px 0 0;
-  padding-left: 18px;
-  line-height: 1.8;
-}
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-left: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
-}
-.filters {
-  padding: 16px;
+.controls {
+  padding: 6px 0;
   border-bottom: 1px solid var(--mantine-color-default-border);
 }
-.timeline {
+.summaryDetails {
+  margin: 0;
+  padding-left: 16px;
+  line-height: 1.6;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+.drawerScroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 4px 12px 20px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
-.day {
-  padding: 0;
-  margin: 0;
+.datePopover {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+.current {
+  flex-shrink: 0;
+  padding: 7px 8px;
+  border-radius: var(--mantine-radius-sm);
+}
+.filters {
+  padding: 4px 0 12px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+.timeline {
+  padding-bottom: 12px;
 }
 .dayToggle {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  display: block;
+  padding: 12px 8px 6px;
   width: 100%;
-  border: 0;
-  background: var(--mantine-color-body);
+  font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-dimmed);
-  text-align: left;
-  padding: 14px 8px 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
-.row {
+.timeline .row {
   display: block;
   width: 100%;
-  text-align: left;
-  background: transparent;
-  color: inherit;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  padding: 11px 12px;
-  margin: 3px 0;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.row:hover {
-  background: light-dark(
-    var(--mantine-color-gray-0),
-    var(--mantine-color-dark-6)
-  );
-}
-.row[aria-pressed="true"] {
-  background: light-dark(
-    var(--mantine-color-blue-0),
-    var(--mantine-color-dark-5)
-  );
-  border-color: var(--mantine-color-blue-3);
-}
-.row:focus-visible {
-  outline: 2px solid var(--mantine-color-blue-5);
-  outline-offset: 2px;
+  text-align: start;
+  padding: 9px 8px;
+  border-radius: var(--mantine-radius-sm);
+  margin-block: 2px;
 }
 .row:disabled {
   cursor: not-allowed;
-  opacity: 0.75;
+  opacity: 0.65;
 }
-.rowTime {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
+.row:focus-visible,
+.current:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
 }
-.rowRevision {
-  font-size: 12px;
-  color: var(--mantine-color-dimmed);
-  font-weight: 400;
-}
-.rowActors {
-  color: var(--mantine-color-dimmed);
-  font-size: 12px;
-  margin-top: 4px;
-}
-.rowSummary {
-  font-size: 12px;
-  margin-top: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.summaryPopover {
+  color: var(--mantine-color-text);
+  border: 1px solid var(--mantine-color-default-border);
+  box-shadow: var(--mantine-shadow-sm);
+  padding: 10px 12px;
+  max-width: calc(100vw - 24px);
+  border-radius: var(--mantine-radius-sm);
 }
 .empty {
+  padding: 24px 8px;
   display: grid;
   place-items: center;
   flex: 1;
-  text-align: center;
-  padding: 24px;
 }
-@media (max-width: 760px) {
-  .layout {
-    display: flex;
+@media (max-width: 47.99em) {
+  .preview {
+    inset-inline: 0;
   }
-  .main {
-    flex: 1;
-  }
-  .sidebar {
-    width: 100%;
-    border-left: 0;
-  }
-  .hiddenMobile {
+}
+@media print {
+  .preview,
+  .drawer {
     display: none;
-  }
-  .header {
-    padding: 10px 12px;
-  }
-  .toolbar {
-    padding: 12px;
-  }
-  .viewport {
-    padding: 12px 10px 36px;
-  }
-  .paper {
-    padding: 22px 16px;
   }
 }
 
-@media (max-width: 760px) {
-  .readOnlyBadge {
-    display: none;
-  }
-  .header > button {
-    flex-shrink: 0;
-  }
-  .header h4 {
-    font-size: 16px;
-  }
+.selectedSummary {
+  min-height: 20px;
 }
-@media (max-width: 360px) {
-  .header h4 {
-    display: none;
-  }
+.viewMode {
+  min-height: 26px;
+}
+.changePreview {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: min(190px, calc(100dvh - 24px));
+  overflow: hidden;
+}
+.changeSnippet {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.changePrefix {
+  margin-inline-end: 5px;
+  color: var(--mantine-color-dimmed);
 }

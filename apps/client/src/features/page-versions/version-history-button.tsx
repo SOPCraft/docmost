@@ -1,12 +1,18 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Provider, useAtomValue } from "jotai";
-import { Badge, Button, Modal, Tooltip } from "@mantine/core";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { ActionIcon, Tooltip } from "@mantine/core";
 import { IconHistory } from "@tabler/icons-react";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
+import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
+import { useMediaQuery } from "@mantine/hooks";
+import { ASIDE_PANEL_ID } from "@/hooks/use-toggle-aside";
 import api from "@/lib/api-client";
-import { VersionList, statusLabels } from "./history-types";
-import { HistoryWorkspace } from "./history-workspace";
+import { VersionList } from "./history-types";
+import {
+  activeHistorySelection,
+  currentHistorySelection,
+  historyDrawerSelectionAtom,
+} from "./history-drawer-state";
 
 export default function VersionHistoryButton({ pageId }: { pageId: string }) {
   const userId = useAtomValue(currentUserAtom)?.user?.id;
@@ -25,8 +31,13 @@ function VersionHistoryEntry({
   pageId: string;
   userId: string;
 }) {
-  const [opened, setOpened] = useState(false);
-  const latest = useQuery({
+  const [aside, setAside] = useAtom(asideStateAtom);
+  const stored = useAtomValue(historyDrawerSelectionAtom);
+  const selected = activeHistorySelection(stored, aside, pageId, userId);
+  const mobile = useMediaQuery("(max-width:47.99em)");
+  const setSelection = useSetAtom(historyDrawerSelectionAtom);
+  const opened = aside.isAsideOpen && aside.tab === "history";
+  const status = useQuery({
     queryKey: ["sop-history-status", userId, pageId],
     queryFn: async ({ signal }) =>
       (
@@ -36,55 +47,49 @@ function VersionHistoryEntry({
           { signal },
         )
       ).data,
-    refetchInterval: (query) =>
-      opened || query.state.data?.enabled === false ? false : 5000,
+    refetchInterval: (q) =>
+      opened || q.state.data?.enabled === false ? false : 5000,
     retry: false,
     gcTime: 0,
   });
-  if (latest.isError) return <Badge variant="light">版本状态暂不可用</Badge>;
-  if (!latest.data?.enabled) return null;
-  const recent = latest.data.items[0];
+  if (!status.isError && !status.data?.enabled) return null;
   return (
     <>
       <Tooltip
         label={
-          recent
-            ? `最近第 ${recent.revision} 版 · ${statusLabels[recent.status] || "状态未知"}`
-            : "查看文档版本记录"
+          status.isError
+            ? "历史记录暂不可用，点击重试"
+            : mobile && selected?.row
+              ? "选择版本"
+              : "历史"
         }
+        openDelay={250}
+        withArrow
       >
-        <Button
-          size="xs"
+        <ActionIcon
           variant="subtle"
-          leftSection={<IconHistory size={16} />}
-          onClick={() => setOpened(true)}
+          color="dark"
+          aria-label="历史"
+          aria-description={
+            selected?.row
+              ? `历史预览，第${selected.row.revision}版，点击选择版本`
+              : undefined
+          }
+          aria-controls={ASIDE_PANEL_ID}
+          aria-expanded={opened}
+          data-testid="history-trigger"
+          onClick={() => {
+            if (mobile && opened && selected?.mobileContent) {
+              setSelection((s) => ({ ...s, mobileContent: false }));
+              return;
+            }
+            setSelection(currentHistorySelection(pageId, userId));
+            setAside({ tab: "history", isAsideOpen: !opened });
+          }}
         >
-          历史版本
-        </Button>
+          <IconHistory size={20} stroke={2} />
+        </ActionIcon>
       </Tooltip>
-      <Modal
-        opened={opened}
-        onClose={() => setOpened(false)}
-        fullScreen
-        title="历史版本"
-        withCloseButton={false}
-        transitionProps={{ duration: 120 }}
-        styles={{
-          header: { display: "none" },
-          body: { padding: 0 },
-          content: { overflow: "hidden" },
-        }}
-      >
-        {opened && (
-          <Provider>
-            <HistoryWorkspace
-              pageId={pageId}
-              userId={userId}
-              onClose={() => setOpened(false)}
-            />
-          </Provider>
-        )}
-      </Modal>
     </>
   );
 }

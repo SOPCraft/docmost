@@ -1,4 +1,4 @@
-import VersionHistoryButton from "@/features/page-versions/version-history-button";
+import { HistoryPreviewStatus } from "@/features/page-versions/history-preview-status";
 import classes from "./page-header.module.css";
 import PageHeaderMenu from "@/features/page/components/header/page-header-menu.tsx";
 import { Badge, Group, Tooltip } from "@mantine/core";
@@ -33,35 +33,51 @@ export default function PageHeader({ readOnly }: Props) {
 
   return (
     <div className={classes.header} data-page-header="true">
-      <Group justify="space-between" h="100%" px="md" wrap="nowrap" className={classes.group}>
-        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Breadcrumb />
+      <Group
+        justify="space-between"
+        h="100%"
+        px="md"
+        wrap="nowrap"
+        className={classes.group}
+      >
+        <Group gap="xs" wrap="nowrap" className={classes.titleRail}>
+          <div className={classes.breadcrumbSlot}>
+            <Breadcrumb />
 
-          {showPublicBadge && (
-            <Tooltip label={t("Open public page")} openDelay={250} withArrow>
-              <Badge
-                component="a"
-                href={buildPublicSpaceUrl({
-                  spaceSlug: space.slug,
-                  pageSlugId: page.slugId,
-                  pageTitle: page.title,
-                })}
-                target="_blank"
-                rel="noopener"
-                size="sm"
-                variant="light"
-                leftSection={<IconWorld size={12} />}
-                rightSection={<IconExternalLink size={11} />}
-                style={{ flexShrink: 0, cursor: "pointer" }}
-              >
-                {t("Public")}
-              </Badge>
-            </Tooltip>
-          )}
+            {showPublicBadge && (
+              <Tooltip label={t("Open public page")} openDelay={250} withArrow>
+                <Badge
+                  component="a"
+                  href={buildPublicSpaceUrl({
+                    spaceSlug: space.slug,
+                    pageSlugId: page.slugId,
+                    pageTitle: page.title,
+                  })}
+                  target="_blank"
+                  rel="noopener"
+                  size="sm"
+                  variant="light"
+                  leftSection={<IconWorld size={12} />}
+                  rightSection={<IconExternalLink size={11} />}
+                  style={{ flexShrink: 0, cursor: "pointer" }}
+                >
+                  {t("Public")}
+                </Badge>
+              </Tooltip>
+            )}
+          </div>
+          {page?.id && <HistoryPreviewStatus pageId={page.id} />}
         </Group>
 
-        <Group justify="flex-end" h="100%" px="md" wrap="nowrap" gap="var(--mantine-spacing-xs)">
-          {page?.id && <VersionHistoryButton key={page.id} pageId={page.id} />}
+        <Group
+          className={classes.actions}
+          data-testid="page-header-actions"
+          justify="flex-end"
+          h="100%"
+          px="md"
+          wrap="nowrap"
+          gap="var(--mantine-spacing-xs)"
+        >
           <PageHeaderMenu readOnly={readOnly} />
         </Group>
       </Group>
