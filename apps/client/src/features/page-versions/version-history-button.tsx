@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAtom, useAtomValue, useSetAtom } from "jotai";
-import { ActionIcon, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Tooltip } from "@mantine/core";
 import { IconHistory } from "@tabler/icons-react";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
@@ -55,25 +55,13 @@ function VersionHistoryEntry({
   if (!status.isError && !status.data?.enabled) return null;
   return (
     <>
-      {selected?.row && (
-        <Text
-          component="span"
-          size="xs"
-          c="dimmed"
-          visibleFrom="sm"
-          style={{ whiteSpace: "nowrap" }}
-          data-testid="history-preview-status"
-        >
-          历史预览 · 第{selected.row.revision}版
-        </Text>
-      )}
       <Tooltip
         label={
           status.isError
             ? "历史记录暂不可用，点击重试"
             : mobile && selected?.row
               ? "选择版本"
-              : "历史版本"
+              : "历史"
         }
         openDelay={250}
         withArrow
@@ -81,7 +69,7 @@ function VersionHistoryEntry({
         <ActionIcon
           variant="subtle"
           color="dark"
-          aria-label="历史版本"
+          aria-label="历史"
           aria-description={
             selected?.row
               ? `历史预览，第${selected.row.revision}版，点击选择版本`

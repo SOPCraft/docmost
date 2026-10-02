@@ -15,6 +15,8 @@ import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import type { VersionRow } from "./history-types";
 import { localDateKey, timeLabel } from "./history-types";
 import type { VersionDetailModel } from "./use-version-detail";
+import { classifyChange } from "./history-change-preview";
+import { ChangeSnippet } from "./history-change-snippet";
 import classes from "./history-workspace.module.css";
 
 export function VersionControls({
@@ -64,17 +66,28 @@ export function VersionControls({
         }
       }}
     >
-      <Stack gap={6}>
-        <Text size="sm" fw={500} data-testid="history-baseline">
+      <Stack gap={4}>
+        <Text size="xs" fw={500} lineClamp={1} data-testid="history-baseline">
           第 {row.revision} 版 · {baseLabel}
         </Text>
-        <Text size="xs" c="dimmed">
-          {localDateKey(row.createdAt)} {timeLabel(row.createdAt)}
-        </Text>
-        <Text size="xs" c="dimmed" lineClamp={2}>
+        <Text
+          size="xs"
+          c="dimmed"
+          lineClamp={1}
+          data-testid="history-version-meta"
+          title={
+            localDateKey(row.createdAt) +
+            " " +
+            timeLabel(row.createdAt) +
+            " · " +
+            row.actors.map((a) => a.name).join("、")
+          }
+        >
+          {localDateKey(row.createdAt)} {timeLabel(row.createdAt)} ·{" "}
           {row.actors.map((a) => a.name).join("、")}
         </Text>
         <SegmentedControl
+          className={classes.viewMode}
           size="xs"
           fullWidth
           aria-label="历史显示方式"
@@ -85,29 +98,42 @@ export function VersionControls({
             { value: "document", label: "只看正文" },
           ]}
         />
-        {summary && (
-          <Text size="xs" lineClamp={2} data-testid="history-change-label">
-            {summary.label}
-          </Text>
-        )}
-        <Button
-          variant="subtle"
-          color="gray"
-          size="compact-xs"
+        <Group
           justify="space-between"
-          fullWidth
-          rightSection={
-            expanded ? (
-              <IconChevronUp size={14} />
-            ) : (
-              <IconChevronDown size={14} />
-            )
-          }
-          aria-expanded={expanded}
-          onClick={() => setExpanded(!expanded)}
+          gap={6}
+          wrap="nowrap"
+          className={classes.selectedSummary}
         >
-          比较与详情
-        </Button>
+          <Text
+            size="xs"
+            c="dimmed"
+            lineClamp={1}
+            data-testid="history-change-label"
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            {summary?.label ||
+              (pending ? "正在读取…" : failed ? "读取失败" : "")}
+          </Text>
+          <Button
+            variant="subtle"
+            color="gray"
+            size="compact-xs"
+            px={2}
+            aria-label="比较与详情"
+            data-testid="history-details-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded(!expanded)}
+            rightSection={
+              expanded ? (
+                <IconChevronUp size={12} />
+              ) : (
+                <IconChevronDown size={12} />
+              )
+            }
+          >
+            详情
+          </Button>
+        </Group>
       </Stack>
       <Collapse expanded={expanded}>
         <Stack gap="xs" mt={6}>
@@ -172,7 +198,9 @@ export function VersionControls({
               data-testid="history-change-summary"
             >
               {summary.details.map((v, i) => (
-                <li key={i}>{v}</li>
+                <li key={i}>
+                  <ChangeSnippet line={classifyChange(v, 160)} />
+                </li>
               ))}
             </ul>
           )}

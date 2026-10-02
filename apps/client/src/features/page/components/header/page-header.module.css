@@ -1,4 +1,5 @@
 .header {
+  container: document-header / inline-size;
   height: 45px;
   background-color: var(--mantine-color-body);
   padding-left: var(--mantine-spacing-md);
@@ -23,5 +24,48 @@
   @media (max-width: $mantine-breakpoint-sm) {
     gap: var(--mantine-spacing-sm);
     padding-inline: 0 !important;
+  }
+}
+
+.titleRail {
+  flex: 1;
+  min-width: 0;
+}
+.breadcrumbSlot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  gap: var(--mantine-spacing-xs);
+}
+.actions {
+  flex: 0 0 auto;
+}
+.historyStatusSlot {
+  flex: 0 0 10rem;
+  inline-size: 10rem;
+  min-width: 0;
+  line-height: 1;
+  block-size: 1rem;
+  display: flex;
+  align-items: center;
+}
+.historyStatus {
+  inline-size: 100%;
+  display: block;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: end;
+}
+.historyStatus[data-active="false"] {
+  visibility: hidden;
+}
+@container document-header (max-width:42rem) {
+  .historyStatusSlot {
+    display: none;
   }
 }

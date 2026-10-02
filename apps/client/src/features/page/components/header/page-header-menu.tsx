@@ -76,6 +76,8 @@ import {
   useUnwatchPageMutation,
 } from "@/features/page/queries/watcher-query";
 
+import VersionHistoryButton from "@/features/page-versions/version-history-button";
+
 interface PageHeaderMenuProps {
   readOnly?: boolean;
 }
@@ -146,6 +148,9 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
         </Tooltip>
       )}
 
+      {!page?.isBase && page?.id && (
+        <VersionHistoryButton key={page.id} pageId={page.id} />
+      )}
       <PageActionMenu readOnly={readOnly} />
     </>
   );
@@ -454,12 +459,21 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
 function ConnectionWarning() {
   const { t } = useTranslation();
   const yjsConnectionStatus = useAtomValue(yjsConnectionStatusAtom);
-  const isDisconnected = ["disconnected", "connecting"].includes(yjsConnectionStatus);
-  const [warning, setWarning] = useState({disconnected:isDisconnected,shown:false});
-  if (warning.disconnected !== isDisconnected) setWarning({disconnected:isDisconnected,shown:false});
+  const isDisconnected = ["disconnected", "connecting"].includes(
+    yjsConnectionStatus,
+  );
+  const [warning, setWarning] = useState({
+    disconnected: isDisconnected,
+    shown: false,
+  });
+  if (warning.disconnected !== isDisconnected)
+    setWarning({ disconnected: isDisconnected, shown: false });
   useEffect(() => {
     if (!isDisconnected) return;
-    const timeout = setTimeout(() => setWarning({disconnected:true,shown:true}),5000);
+    const timeout = setTimeout(
+      () => setWarning({ disconnected: true, shown: true }),
+      5000,
+    );
     return () => clearTimeout(timeout);
   }, [isDisconnected]);
   if (!isDisconnected || !warning.disconnected || !warning.shown) return null;

@@ -1,18 +1,12 @@
 import { useMemo, useState } from "react";
-import {
-  Button,
-  Group,
-  Stack,
-  Text,
-  Tooltip,
-  UnstyledButton,
-} from "@mantine/core";
+import { Button, Group, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   localDateKey,
   timeLabel,
   VersionRow,
   statusLabels,
 } from "./history-types";
+import { HistoryChangePreview } from "./history-change-snippet";
 import { summaryPreview } from "./history-summary-preview";
 import native from "@/features/page-history/components/css/history.module.css";
 import classes from "./history-workspace.module.css";
@@ -69,36 +63,25 @@ export function VersionTimeline({
               return (
                 <Tooltip
                   key={row.id}
-                  position="left-start"
+                  position="bottom-end"
+                  floatingStrategy="fixed"
+                  middlewares={{
+                    flip: {
+                      fallbackPlacements: ["top-end"],
+                      fallbackAxisSideDirection: "none",
+                    },
+                    shift: { padding: 8, crossAxis: false },
+                  }}
+                  data-testid="history-hover-preview"
+                  data-preview-revision={row.revision}
                   multiline
-                  w={280}
+                  w="min(248px, calc(100vw - 40px))"
                   color="var(--mantine-color-body)"
                   classNames={{ tooltip: classes.summaryPopover }}
                   openDelay={400}
                   closeDelay={100}
                   events={{ hover: true, focus: true, touch: false }}
-                  label={
-                    <Stack gap={6}>
-                      <Text size="xs" fw={500}>
-                        {preview.label}
-                      </Text>
-                      {preview.items.map((detail, i) => (
-                        <Text
-                          key={i}
-                          size="xs"
-                          c="dimmed"
-                          style={{ overflowWrap: "anywhere" }}
-                        >
-                          {detail}
-                        </Text>
-                      ))}
-                      {(preview.more || preview.limited) && (
-                        <Text size="xs" c="dimmed">
-                          点击版本查看完整内容
-                        </Text>
-                      )}
-                    </Stack>
-                  }
+                  label={<HistoryChangePreview summary={row.summary} />}
                 >
                   <UnstyledButton
                     className={[

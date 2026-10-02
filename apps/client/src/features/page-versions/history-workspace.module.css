@@ -33,7 +33,7 @@
   overflow-wrap: anywhere;
 }
 .controls {
-  padding: 10px 0 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--mantine-color-default-border);
 }
 .summaryDetails {
@@ -58,7 +58,7 @@
 }
 .current {
   flex-shrink: 0;
-  padding: 10px 8px;
+  padding: 7px 8px;
   border-radius: var(--mantine-radius-sm);
 }
 .filters {
@@ -116,4 +116,27 @@
   .drawer {
     display: none;
   }
+}
+
+.selectedSummary {
+  min-height: 20px;
+}
+.viewMode {
+  min-height: 26px;
+}
+.changePreview {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: min(190px, calc(100dvh - 24px));
+  overflow: hidden;
+}
+.changeSnippet {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.changePrefix {
+  margin-inline-end: 5px;
+  color: var(--mantine-color-dimmed);
 }
