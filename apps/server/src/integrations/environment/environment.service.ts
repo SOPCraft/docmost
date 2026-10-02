@@ -69,6 +69,14 @@ export class EnvironmentService {
     let msUntilExpiry: number;
     try {
       msUntilExpiry = ms(expiresInStr as StringValue);
+      // The duration parser can return undefined without throwing. Also reject
+      // finite durations outside the date range rather than emitting an invalid cookie.
+      if (
+        !Number.isFinite(msUntilExpiry) ||
+        !Number.isFinite(new Date(Date.now() + msUntilExpiry).getTime())
+      ) {
+        throw new Error('Invalid cookie lifetime');
+      }
     } catch (err) {
       msUntilExpiry = ms('90d');
     }

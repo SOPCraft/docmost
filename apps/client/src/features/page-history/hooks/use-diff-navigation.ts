@@ -10,7 +10,15 @@ export function useDiffNavigation(
   scrollViewportRef: RefObject<HTMLDivElement>,
 ) {
   const diffCounts = useAtomValue(diffCountsAtom);
-  const [currentChangeIndex, setCurrentChangeIndex] = useState(0);
+  const [selection, setSelection] = useState<{
+    counts: typeof diffCounts;
+    index: number;
+  }>({ counts: null, index: 0 });
+  const currentChangeIndex = diffCounts?.total
+    ? selection.counts === diffCounts
+      ? Math.max(1, Math.min(selection.index, diffCounts.total))
+      : 1
+    : 0;
 
   const scrollToChangeIndex = useCallback(
     (index: number) => {
@@ -19,7 +27,10 @@ export function useDiffNavigation(
 
       const element = viewport.querySelector(`[data-diff-index="${index}"]`);
       if (element instanceof HTMLElement) {
-        const elementTop = element.offsetTop;
+        const elementTop =
+          element.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top +
+          viewport.scrollTop;
         const viewportHeight = viewport.clientHeight;
         const scrollTarget =
           elementTop - viewportHeight / 2 + element.offsetHeight / 2;
@@ -31,10 +42,8 @@ export function useDiffNavigation(
 
   useEffect(() => {
     if (diffCounts && diffCounts.total > 0) {
-      setCurrentChangeIndex(1);
-      requestAnimationFrame(() => scrollToChangeIndex(1));
-    } else {
-      setCurrentChangeIndex(0);
+      const frame = requestAnimationFrame(() => scrollToChangeIndex(1));
+      return () => cancelAnimationFrame(frame);
     }
   }, [diffCounts, scrollToChangeIndex]);
 
@@ -42,7 +51,7 @@ export function useDiffNavigation(
     if (!diffCounts || diffCounts.total === 0) return;
     const newIndex =
       currentChangeIndex <= 1 ? diffCounts.total : currentChangeIndex - 1;
-    setCurrentChangeIndex(newIndex);
+    setSelection({ counts: diffCounts, index: newIndex });
     scrollToChangeIndex(newIndex);
   }, [diffCounts, currentChangeIndex, scrollToChangeIndex]);
 
@@ -50,7 +59,7 @@ export function useDiffNavigation(
     if (!diffCounts || diffCounts.total === 0) return;
     const newIndex =
       currentChangeIndex >= diffCounts.total ? 1 : currentChangeIndex + 1;
-    setCurrentChangeIndex(newIndex);
+    setSelection({ counts: diffCounts, index: newIndex });
     scrollToChangeIndex(newIndex);
   }, [diffCounts, currentChangeIndex, scrollToChangeIndex]);
 
