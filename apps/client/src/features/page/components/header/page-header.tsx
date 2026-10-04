@@ -1,5 +1,6 @@
 import { HistoryPreviewStatus } from "@/features/page-versions/history-preview-status";
 import classes from "./page-header.module.css";
+import HandbookButton from "./handbook-button";
 import PageHeaderMenu from "@/features/page/components/header/page-header-menu.tsx";
 import { Badge, Group, Tooltip } from "@mantine/core";
 import { IconExternalLink, IconWorld } from "@tabler/icons-react";
@@ -78,6 +79,7 @@ export default function PageHeader({ readOnly }: Props) {
           wrap="nowrap"
           gap="var(--mantine-spacing-xs)"
         >
+          {page?.id && <HandbookButton pageId={page.id} readOnly={readOnly || page.permissions?.canEdit === false} />}
           <PageHeaderMenu readOnly={readOnly} />
         </Group>
       </Group>

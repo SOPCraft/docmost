@@ -13,13 +13,18 @@ import { VersioningModule } from '../../integrations/versioning/versioning.modul
 import { VersionedTrashService } from './services/versioned-trash.service';
 import { VersionHistoryService } from './services/version-history.service';
 import { VersionHistoryController } from './version-history.controller';
+import { HandbookController } from './handbook.controller';
+import { HandbookService } from './services/handbook.service';
+import { HandbookJobStore } from './services/handbook-job.store';
 
 @Module({
-  controllers: [PageController, VersionHistoryController],
+  controllers: [PageController, VersionHistoryController, HandbookController],
   providers: [
     PageService,
     VersionedTrashService,
     VersionHistoryService,
+    HandbookService,
+    HandbookJobStore,
     PageHistoryService,
     TrashCleanupService,
     BacklinkService,

@@ -61,6 +61,11 @@ export class VersionHistoryService {
     }
     return page;
   }
+  async displayAccess(pageId: string, user: User) {
+    const page=await this.authorize(pageId,user);
+    if(page.deletedAt) throw new NotFoundException('Page not found');
+    return page;
+  }
   async list(
     pageId: string,
     user: User,
