@@ -28,6 +28,7 @@ function setup() {
 async function open() {
   setup(); fireEvent.click(screen.getByRole('button', { name: '流程整理' }));
   await screen.findByText(/内置技能：通用流程整理/);
+  await waitFor(() => expect((screen.getByRole('button', { name: '整理选中资料' }) as HTMLButtonElement).disabled).toBe(false));
 }
 beforeEach(() => {
   mocks.user = { id: 'fixture-user' };
@@ -60,6 +61,19 @@ describe('native organizer', () => {
     expect(screen.getAllByText('合成资料').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '整理选中资料' }));
     expect(mocks.post.mock.calls.some(([route]) => route.endsWith('/generate'))).toBe(false);
+  });
+  it('keeps generation disabled until the administrator configuration is resolved', async () => {
+    let resolve!: (value: unknown) => void;
+    const fallback = mocks.post.getMockImplementation()!;
+    mocks.post.mockImplementation((route, ...args) => route.endsWith('/status') ? new Promise(done => { resolve = done; }) : fallback(route, ...args));
+    setup(); fireEvent.click(screen.getByRole('button', { name: '流程整理' }));
+    const button = screen.getByRole('button', { name: '整理选中资料' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(mocks.post.mock.calls.some(([route]) => route.endsWith('/prepare') || route.endsWith('/generate'))).toBe(false);
+    await waitFor(() => expect(resolve).toBeTypeOf('function'));
+    await act(async () => { resolve({ data: config }); });
+    await waitFor(() => expect(button.disabled).toBe(false));
   });
   it('prepares exact versions before generation and labels the result unsaved', async () => {
     await open(); fireEvent.click(screen.getByRole('button', { name: '整理选中资料' }));
