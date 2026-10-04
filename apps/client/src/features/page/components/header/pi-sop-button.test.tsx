@@ -32,6 +32,8 @@ async function open() {
 beforeEach(() => {
   mocks.user = { id: 'fixture-user' };
   Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+  // jsdom lacks FontFaceSet; the real Mantine autosize component subscribes to it.
+  Object.defineProperty(document, 'fonts', { configurable: true, value: new EventTarget() });
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: vi.fn().mockImplementation(() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} })) });
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   mocks.post.mockReset().mockImplementation(async (route: string) => {
@@ -91,6 +93,13 @@ describe('native organizer', () => {
     fireEvent(document, new Event('visibilitychange'));
     expect(screen.queryByText('合成流程预览')).toBeNull();
   });
+  it('removes the preview when periodic source revalidation fails', async () => {
+    const fallback = mocks.post.getMockImplementation()!;
+    mocks.post.mockImplementation((route, ...args) => route.endsWith('/revalidate') ? Promise.reject(new Error('revoked')) : fallback(route, ...args));
+    await open(); fireEvent.click(screen.getByRole('button', { name: '整理选中资料' })); await screen.findByText('合成流程预览');
+    await waitFor(() => expect(screen.queryByText('合成流程预览')).toBeNull(), { timeout: 7000 });
+    expect(screen.getByText(/来源已变化、无法访问或连接中断/)).toBeTruthy();
+  }, 10000);
   it('renders hostile source snippets as text rather than executable markup', () => {
     const view = render(<MantineProvider env="test"><PiDraftPreview result={preview()} /></MantineProvider>);
     expect(view.container.querySelector('img')).toBeNull();
