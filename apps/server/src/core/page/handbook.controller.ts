@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, HttpCode, HttpStatus, Param, Query, Req, Res, UseGuards, NotFoundException } from '@nestjs/common';
-import { IsUUID, IsObject, IsBoolean, IsOptional } from 'class-validator';
+import { IsUUID, IsObject, IsBoolean, IsOptional, IsString, Matches, IsIn } from 'class-validator';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -10,12 +10,24 @@ import { handbookReaderRuntime } from './handbook-reader-runtime';
 export class HandbookPageDto { @IsUUID() pageId:string; @IsOptional() @IsUUID() jobId?:string; }
 export class HandbookConfigurationDto extends HandbookPageDto { @IsObject() binding:object; @IsBoolean() autoUpdate:boolean; }
 export class HandbookAutomaticDto extends HandbookPageDto { @IsBoolean() enabled:boolean; }
+export class HandbookLayoutDto extends HandbookPageDto {
+  @IsString() @Matches(/^[a-z][a-z0-9-]{0,63}$/) templateId:string;
+  @IsString() @Matches(/^\d+\.\d+\.\d+$/) templateVersion:string;
+  @IsIn(['comfortable','compact']) density:string;
+}
+export class HandbookLayoutApplyDto extends HandbookLayoutDto { @IsString() @Matches(/^[a-f0-9]{64}$/) proposalHash:string; @IsBoolean() autoUpdate:boolean; }
 @UseGuards(JwtAuthGuard)
 @Controller('pages/handbook')
 export class HandbookController {
   constructor(private readonly handbooks:HandbookService){}
   @Post('status') @HttpCode(HttpStatus.OK) @OAuthScope('read')
   status(@Body() dto:HandbookPageDto,@AuthUser() user:User){return this.handbooks.status(dto.pageId,user,dto.jobId);}
+  @Post('layout-options') @HttpCode(HttpStatus.OK) @OAuthScope('read')
+  options(@Body() dto:HandbookPageDto,@AuthUser() user:User){return this.handbooks.layoutOptions(dto.pageId,user);}
+  @Post('layout-preview') @HttpCode(HttpStatus.OK) @OAuthScope('write')
+  preview(@Body() dto:HandbookLayoutDto,@AuthUser() user:User){return this.handbooks.previewLayout(dto.pageId,{id:dto.templateId,version:dto.templateVersion,density:dto.density},user);}
+  @Post('layout-apply') @HttpCode(HttpStatus.OK) @OAuthScope('write')
+  apply(@Body() dto:HandbookLayoutApplyDto,@AuthUser() user:User){return this.handbooks.applyLayout(dto.pageId,{id:dto.templateId,version:dto.templateVersion,density:dto.density},dto.proposalHash,dto.autoUpdate,user);}
   @Post('configure') @HttpCode(HttpStatus.OK) @OAuthScope('write')
   configure(@Body() dto:HandbookConfigurationDto,@AuthUser() user:User){return this.handbooks.configure(dto.pageId,dto.binding,dto.autoUpdate,user);}
   @Post('refresh') @HttpCode(HttpStatus.OK) @OAuthScope('write')

@@ -16,15 +16,20 @@ import { VersionHistoryController } from './version-history.controller';
 import { HandbookController } from './handbook.controller';
 import { HandbookService } from './services/handbook.service';
 import { HandbookJobStore } from './services/handbook-job.store';
+import { PiSopController } from './pi-sop.controller';
+import { PiSopService } from './services/pi-sop.service';
+import { PiSopRuntimeService } from './services/pi-sop-runtime.service';
 
 @Module({
-  controllers: [PageController, VersionHistoryController, HandbookController],
+  controllers: [PageController, VersionHistoryController, HandbookController, PiSopController],
   providers: [
     PageService,
     VersionedTrashService,
     VersionHistoryService,
     HandbookService,
     HandbookJobStore,
+    PiSopService,
+    PiSopRuntimeService,
     PageHistoryService,
     TrashCleanupService,
     BacklinkService,
