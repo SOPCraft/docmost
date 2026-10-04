@@ -17,7 +17,7 @@ export interface PiGenerateRequest {
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function exact(value: unknown, keys: string[]) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
-      Object.keys(value).length !== keys.length || keys.some(key => !Object.hasOwn(value, key)))
+      Object.keys(value).length !== keys.length || keys.some(key => !Object.prototype.hasOwnProperty.call(value, key)))
     throw new BadRequestException('PI_REQUEST_INVALID');
 }
 export function validatePiSelections(value: unknown): asserts value is PiSelection[] {
@@ -157,7 +157,8 @@ export class PiSopService {
       const safe = new Set(['PI_CANCELLED', 'PI_TIMEOUT', 'SOURCE_ACCESS_DENIED', 'SOURCE_ACCESS_CHECK_FAILED',
         'SOURCE_READ_FAILED', 'SOURCE_CHANGED_DURING_GENERATION', 'UNSUPPORTED_SOURCE_STRUCTURE',
         'SOURCE_TOO_LARGE_NO_TRUNCATION', 'SOURCE_COVERAGE_INCOMPLETE', 'PI_HOST_CONFIGURATION_CHANGED']);
-      const code = safe.has(error?.code) ? error.code : 'PI_GENERATION_FAILED';
+      const candidate = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+      const code = typeof candidate === 'string' && safe.has(candidate) ? candidate : 'PI_GENERATION_FAILED';
       throw new ServiceUnavailableException(code);
     } finally {
       this.active.delete(key);
