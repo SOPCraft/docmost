@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
+import { canonicalJson } from '../../../integrations/versioning/version-snapshot';
+export const handbookTargetToken=(target:any)=>target?createHash('sha256').update(canonicalJson({generation:target.generation,bindingHash:target.bindingHash,actorId:target.actorId,spaceId:target.spaceId,autoUpdate:target.autoUpdate})).digest('hex'):null;
 import { KyselyDB } from '../../../database/types/kysely.types';
 
 export interface HandbookTarget {
@@ -23,12 +25,20 @@ export class HandbookJobStore {
   async job(workspaceId:string,pageId:string,id:string):Promise<HandbookJob|undefined> {
     return (await sql<HandbookJob>`SELECT * FROM sop_handbook_jobs WHERE workspace_id=${workspaceId}::uuid AND page_id=${pageId}::uuid AND id=${id}::uuid`.execute(this.db)).rows[0];
   }
-  async configure(value:{workspaceId:string;pageId:string;spaceId:string;actorId:string;binding:any;bindingHash:string;autoUpdate:boolean}) {
+  async configure(value:{workspaceId:string;pageId:string;spaceId:string;actorId:string;binding:any;bindingHash:string;autoUpdate:boolean}, guard?:{targetToken:string|null;versionId:string}) {
     return this.db.transaction().execute(async tx=>{
-      await sql`INSERT INTO sop_handbook_targets(workspace_id,page_id,space_id,actor_id,binding,binding_hash,auto_update)
+      const inserted=await sql`INSERT INTO sop_handbook_targets(workspace_id,page_id,space_id,actor_id,binding,binding_hash,auto_update)
         VALUES(${value.workspaceId}::uuid,${value.pageId}::uuid,${value.spaceId}::uuid,${value.actorId}::uuid,${JSON.stringify(value.binding)}::text::jsonb,${value.bindingHash},${value.autoUpdate})
-        ON CONFLICT(workspace_id,page_id) DO NOTHING`.execute(tx);
+        ON CONFLICT(workspace_id,page_id) DO NOTHING RETURNING page_id`.execute(tx);
       const old=(await sql<HandbookTarget>`SELECT * FROM sop_handbook_targets WHERE workspace_id=${value.workspaceId}::uuid AND page_id=${value.pageId}::uuid FOR UPDATE`.execute(tx)).rows[0];
+      if(guard){
+        if(inserted.rows.length?guard.targetToken!==null:handbookTargetToken(old)!==guard.targetToken)throw new Error('LAYOUT_TARGET_CHANGED');
+        const fixed=(await sql`SELECT v.id FROM sop_page_versions v JOIN pages p ON p.id=v.page_id AND p.workspace_id=v.workspace_id AND p.space_id=v.space_id
+          WHERE v.id=${guard.versionId}::uuid AND v.page_id=${value.pageId}::uuid AND v.workspace_id=${value.workspaceId}::uuid AND v.space_id=${value.spaceId}::uuid
+          AND v.status='synced' AND p.deleted_at IS NULL AND p.title=v.snapshot->'page'->>'title' AND p.content::jsonb=v.snapshot->'page'->'content'
+          AND NOT EXISTS(SELECT 1 FROM sop_page_versions newer WHERE newer.workspace_id=v.workspace_id AND newer.page_id=v.page_id AND newer.revision>v.revision) FOR SHARE OF p`.execute(tx)).rows.length;
+        if(fixed!==1)throw new Error('LAYOUT_SOURCE_CHANGED');
+      }
       const changed=old.bindingHash.trim()!==value.bindingHash||old.actorId!==value.actorId||old.spaceId!==value.spaceId;
       if(changed) await sql`UPDATE sop_handbook_jobs SET state='superseded',completed_at=now() WHERE workspace_id=${value.workspaceId}::uuid AND page_id=${value.pageId}::uuid AND state IN('queued','running')`.execute(tx);
       return (await sql<HandbookTarget>`UPDATE sop_handbook_targets SET binding=${JSON.stringify(value.binding)}::text::jsonb,binding_hash=${value.bindingHash},actor_id=${value.actorId}::uuid,

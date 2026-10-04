@@ -10,7 +10,7 @@ import { SpaceMemberRepo } from '../../../database/repos/space/space-member.repo
 import { PagePermissionRepo } from '../../../database/repos/page/page-permission.repo';
 import { StorageService } from '../../../integrations/storage/storage.service';
 import { VersionHistoryService } from './version-history.service';
-import { HandbookJobStore, HandbookJob } from './handbook-job.store';
+import { HandbookJobStore, HandbookJob, handbookTargetToken } from './handbook-job.store';
 import { canonicalJson } from '../../../integrations/versioning/version-snapshot';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -22,7 +22,7 @@ const execute=promisify(execFile);
 const hash=(v:Buffer|string)=>createHash('sha256').update(v).digest('hex');
 const contentHash=(v:any)=>hash(canonicalJson({title:v.title,content:v.content}));
 const idPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const filePattern=/^(index\.html|source\.html|handbook\.css|editorial\.css|reader\.js|vendor\/(basecoat|typeset)\.css|assets\/[a-f0-9]{64}\.(png|jpg|webp|mp4))$/;
+const filePattern=/^(index\.html|source\.html|handbook\.css|editorial\.css|reader\.js|flow-reader\.(css|js)|vendor\/(basecoat|typeset)\.css|assets\/[a-f0-9]{64}\.(png|jpg|webp|mp4))$/;
 export const handbookFilePattern=filePattern;
 @Injectable()
 export class HandbookService implements OnApplicationBootstrap,OnApplicationShutdown {
@@ -57,6 +57,38 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
   private async latest(pageId:string,user:User){
     const list=await this.history.list(pageId,user,undefined,{summaries:false});
     const row=list.items[0];if(!row||row.status!=='synced')throw new ConflictException('SOURCE_VERSION_PENDING');return row;
+  }
+  private async layoutRunner(c:{runner:string},payload:any){
+    const scratch=await fs.mkdtemp(path.join(os.tmpdir(),'sop-handbook-'));
+    try{await fs.writeFile(path.join(scratch,'input.json'),JSON.stringify(payload));const result=await execute(process.execPath,[c.runner,scratch],{timeout:20000,maxBuffer:4*1024*1024});return JSON.parse(result.stdout);}
+    catch(e){const detail=String(e instanceof Error&&'stderr' in e?e.stderr:'');const code=detail.match(/LAYOUT_INPUT:([a-zA-Z0-9_-]+)/)?.[1];throw new BadRequestException(code?'LAYOUT_INPUT:'+code:'LAYOUT_REQUIRED');}
+    finally{await fs.rm(scratch,{recursive:true,force:true});}
+  }
+  async layoutOptions(pageId:string,user:User){const c=await this.configuration();if(!c)throw new ServiceUnavailableException('HANDBOOK_DISABLED');await this.access(pageId,user);return this.layoutRunner(c,{mode:'catalog'});}
+  private async prepareLayout(pageId:string,selection:{id:string;version:string;density:string},user:User){
+    const c=await this.configuration();if(!c)throw new ServiceUnavailableException('HANDBOOK_DISABLED');
+    const access=await this.access(pageId,user,true),targetState=await this.store.target(user.workspaceId,pageId);
+    if(targetState&&targetState.spaceId!==access.page.spaceId)throw new ConflictException('SOURCE_MOVED');
+    const version=await this.latest(pageId,access.user),source=await this.history.displaySource(pageId,version.id,access.user);
+    const assetStamp=await this.mediaStamp(source.content,access.user,c.origin);
+    const target={pageId,versionId:version.id,url:c.origin+'/s/general/p/'+access.page.slugId};
+    const plan=await this.layoutRunner(c,{mode:'plan',source,target,selection});
+    if(!plan.binding||Buffer.byteLength(JSON.stringify(plan.binding))>256*1024)throw new BadRequestException('LAYOUT_TOO_LARGE');
+    const token=handbookTargetToken(targetState),bindingHash=hash(canonicalJson(plan.binding));
+    const proposalHash=hash(canonicalJson({workspaceId:user.workspaceId,actorId:user.id,pageId,sourceVersion:version.id,snapshot:source.snapshotSha256,bindingHash,rendererHash:c.rendererHash,assetStamp,targetToken:token}));
+    if(canonicalJson(await this.history.displaySource(pageId,version.id,access.user))!==canonicalJson(source))throw new ConflictException('LAYOUT_SOURCE_CHANGED');
+    await this.access(pageId,access.user,true);
+    return {access,plan,token,bindingHash,version,proposalHash};
+  }
+  async previewLayout(pageId:string,selection:{id:string;version:string;density:string},user:User){
+    const p=await this.prepareLayout(pageId,selection,user);return {proposalHash:p.proposalHash,versionId:p.version.id,revision:p.version.revision,summary:p.plan.summary};
+  }
+  async applyLayout(pageId:string,selection:{id:string;version:string;density:string},proposalHash:string,autoUpdate:boolean,user:User){
+    const p=await this.prepareLayout(pageId,selection,user);if(p.proposalHash!==proposalHash)throw new ConflictException('LAYOUT_PREVIEW_CHANGED');
+    try{await this.store.configure({workspaceId:user.workspaceId,pageId,spaceId:p.access.page.spaceId,actorId:user.id,binding:p.plan.binding,bindingHash:p.bindingHash,autoUpdate},{targetToken:p.token,versionId:p.version.id});}
+    catch(e){if(e instanceof Error&&['LAYOUT_TARGET_CHANGED','LAYOUT_SOURCE_CHANGED'].includes(e.message))throw new ConflictException(e.message);throw e;}
+    // Configuration is durable even if a new source edit postpones the subsequent job.
+    return this.refresh(pageId,user);
   }
   async configure(pageId:string,binding:any,autoUpdate:boolean,user:User){
     const c=await this.configuration();if(!c)throw new ServiceUnavailableException('HANDBOOK_DISABLED');
