@@ -1,6 +1,7 @@
 import { HistoryPreviewStatus } from "@/features/page-versions/history-preview-status";
 import classes from "./page-header.module.css";
 import HandbookButton from "./handbook-button";
+import PiSopButton from "./pi-sop-button";
 import PageHeaderMenu from "@/features/page/components/header/page-header-menu.tsx";
 import { Badge, Group, Tooltip } from "@mantine/core";
 import { IconExternalLink, IconWorld } from "@tabler/icons-react";
@@ -79,6 +80,7 @@ export default function PageHeader({ readOnly }: Props) {
           wrap="nowrap"
           gap="var(--mantine-spacing-xs)"
         >
+          {page?.id && <PiSopButton pageId={page.id} title={page.title || "未命名文档"} />}
           {page?.id && <HandbookButton pageId={page.id} readOnly={readOnly || page.permissions?.canEdit === false} />}
           <PageHeaderMenu readOnly={readOnly} />
         </Group>
