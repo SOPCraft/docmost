@@ -54,7 +54,12 @@ describe('native organizer', () => {
     mocks.post.mockResolvedValue({ data: { enabled: false } });
     setup(); fireEvent.click(screen.getByRole('button', { name: '流程整理' }));
     await screen.findByText(/管理员尚未为当前工作空间启用模型/);
-    expect(screen.queryByRole('button', { name: '整理选中资料' })).toBeNull();
+    expect((screen.getByRole('button', { name: '整理选中资料' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByLabelText('整理要求')).toBeTruthy();
+    expect(screen.getByLabelText('添加资料')).toBeTruthy();
+    expect(screen.getAllByText('合成资料').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '整理选中资料' }));
+    expect(mocks.post.mock.calls.some(([route]) => route.endsWith('/generate'))).toBe(false);
   });
   it('prepares exact versions before generation and labels the result unsaved', async () => {
     await open(); fireEvent.click(screen.getByRole('button', { name: '整理选中资料' }));

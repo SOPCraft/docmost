@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Accordion, ActionIcon, Alert, Badge, Button, Drawer, Group, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
+import { Accordion, ActionIcon, Alert, Badge, Button, Drawer, Group, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { IconSparkles, IconX } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
@@ -130,22 +130,22 @@ function Entry({ pageId, title, userId }: { pageId: string; title: string; userI
   const close = () => { invalidate(); setError(''); setQuery(''); setSelected([{ id: pageId, title }]); setOpened(false); };
 
   return <>
-    <Tooltip label="流程整理"><ActionIcon aria-label="流程整理" variant="subtle" color="dark" data-testid="pi-sop-trigger" onClick={() => setOpened(true)}><IconSparkles size={20} /></ActionIcon></Tooltip>
+    <Button aria-label="流程整理" variant="subtle" size="compact-sm" leftSection={<IconSparkles size={16} />} data-testid="pi-sop-trigger" onClick={() => setOpened(true)}>流程整理</Button>
     <Drawer opened={opened} onClose={close} title="流程整理" position="right" size="lg">
       <Stack gap="md">
         <Text size="sm">选择一篇或多篇资料，使用内置技能梳理步骤、责任人、检查项与异常处理。不会覆盖原稿。</Text>
         {status.isLoading && <Text role="status">正在检查访问权限和模型设置。</Text>}
         {!status.isLoading && !status.isError && !status.data?.enabled && <Alert>管理员尚未为当前工作空间启用模型。模型地址和密钥只在服务端配置。</Alert>}
-        {status.data?.enabled && <>
-          <Text size="sm">内置技能：{status.data.skill?.label}；模型：{status.data.model?.label}（管理员配置）。</Text>
-          <Alert>点击整理后，所选资料的文字与表格文字会发送给上述模型。图片、视频和链接目标暂不解析。</Alert>
+        {<>
+          <Text size="sm">内置技能：{status.data?.skill?.label || "通用流程整理"}；模型：{status.data?.enabled ? `${status.data.model?.label}（管理员配置）` : "尚未配置"}。</Text>
+          {status.data?.enabled && <Alert>点击整理后，所选资料的文字与表格文字会发送给上述模型。图片、视频和链接目标暂不解析。</Alert>}
           <Text fw={600}>已选资料（{selected.length}/10）</Text>
           {selected.map(item => <Group key={item.id} justify="space-between" wrap="nowrap"><Text size="sm" style={{ overflowWrap: 'anywhere' }}>{item.title || '未命名文档'}</Text><ActionIcon aria-label={`移除${item.title}`} disabled={busy} onClick={() => { invalidate(); setSelected(selected.filter(value => value.id !== item.id)); }}><IconX size={16} /></ActionIcon></Group>)}
           <TextInput label="添加资料" placeholder="输入至少两个字搜索文档标题" value={query} disabled={busy || selected.length >= 10} onChange={event => setQuery(event.currentTarget.value)} />
           {search.isError && <Text size="sm" c="red">搜索失败，未添加任何资料。</Text>}
           {debounced.trim().length >= 2 && search.data?.filter(item => !selected.some(value => value.id === item.id)).slice(0, 10).map(item => <Button key={item.id} variant="light" disabled={busy || selected.length >= 10} onClick={() => { invalidate(); setSelected([...selected, item]); setQuery(''); }}>{item.title || '未命名文档'}</Button>)}
           <Textarea label="整理要求" value={instruction} maxLength={4000} autosize minRows={3} disabled={busy} onChange={event => { invalidate(); setInstruction(event.currentTarget.value); }} />
-          <Group><Button data-testid="pi-sop-generate" loading={busy} disabled={!selected.length || status.isError} onClick={() => { void generate(); }}>整理选中资料</Button>{busy && <Button variant="default" onClick={() => { invalidate(); setError('本次整理已取消。'); }}>取消本次整理</Button>}</Group>
+          <Group><Button data-testid="pi-sop-generate" loading={busy} disabled={!selected.length || status.isError || !status.data?.enabled} onClick={() => { void generate(); }}>整理选中资料</Button>{busy && <Button variant="default" onClick={() => { invalidate(); setError('本次整理已取消。'); }}>取消本次整理</Button>}</Group>
           {busy && <Text role="status">正在固定来源、调用指定技能并校验结果；尚未保存任何内容。</Text>}
         </>}
         {error && <Alert color="red" role="alert">{error}</Alert>}
