@@ -52,7 +52,7 @@ it('does not return earlier selections after access is revoked', async () => {
   await expect(f.service.prepare({ pageIds: [pageId] }, f.user as any)).rejects.toBeInstanceOf(ForbiddenException);
 });
 it.each([[], Array(11).fill({ pageId, versionId }), [{ pageId, versionId }, { pageId: pageId.toUpperCase(), versionId }],
-  [{ pageId: '../private', versionId }], [{ pageId, versionId, actorId }]])('rejects invalid selections %j', value => {
+  [{ pageId: '../private', versionId }], [{ pageId, versionId, actorId }]].map(value => [value]))('rejects invalid selections %j', value => {
   expect(() => validatePiSelections(value)).toThrow();
 });
 it('uses the authenticated actor and actual source service callbacks', async () => {
