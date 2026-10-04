@@ -475,6 +475,45 @@ const testUrl = process.env.SOP_CAPTURE_TEST_DATABASE_URL;
       expect(rendered).toContain('未纳入');
     });
 
+    it('display export retains full fixed rich content without exposing collaboration state', async () => {
+      const id = await page();
+      const content = { type: 'doc', content: [{type:'paragraph',attrs:{id:'stable-paragraph'},content:[{type:'text',text:'原文001。'}]}, {type:'image',attrs:{src:'http://private.invalid/current.png',attachmentId:randomUUID()}}] };
+      await sql`UPDATE pages SET content=${JSON.stringify(content)}::text::jsonb WHERE id=${id}::uuid`.execute(db);
+      const saved = await save(id); await worker.tick();
+      const result = await historyFor().service.displaySource(id, saved.id, viewer());
+      expect(result.content).toEqual(content);
+      expect(result.versionId).toBe(saved.id);
+      expect(result.mediaPolicy).toBe('capture-current-authorized-bytes');
+      expect(result).not.toHaveProperty('actors');
+      expect(JSON.stringify(result)).not.toContain('ydocBase64');
+      expect(JSON.stringify((await historyFor().service.read(id,saved.id,viewer())).content)).not.toContain('private.invalid');
+    });
+    it('display export refuses an unchanged document after a newer pending revision', async () => {
+      const id = await page(), first = await save(id); await worker.tick();
+      await sql`UPDATE pages SET ydoc=${Buffer.from([9,9])} WHERE id=${id}::uuid`.execute(db); await save(id);
+      await expect(historyFor().service.displaySource(id,first.id,viewer())).rejects.toThrow('Source changed');
+    });
+    it('display export refuses unsaved content drift instead of relabeling old bytes', async () => {
+      const id = await page(), first = await save(id); await worker.tick();
+      await sql`UPDATE pages SET content='{"type":"doc","content":[]}'::jsonb WHERE id=${id}::uuid`.execute(db);
+      await expect(historyFor().service.displaySource(id,first.id,viewer())).rejects.toThrow('Source changed');
+    });
+    it('display export repeats authorization immediately before its raw response', async () => {
+      const id = await page(), first = await save(id); await worker.tick();
+      const permission=jest.fn().mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('revoked'));
+      await expect(historyFor(permission).service.displaySource(id,first.id,viewer())).rejects.toThrow('revoked');
+      expect(permission).toHaveBeenCalledTimes(3);
+    });
+    it('display export rejects cross-workspace reads before the repository', async () => {
+      const id=await page(), first=await save(id);await worker.tick();client.requests=[];
+      await expect(historyFor().service.displaySource(id,first.id,{id:actorB,workspaceId:randomUUID()} as any)).rejects.toThrow('Page not found');
+      expect(client.requests).toHaveLength(0);
+    });
+    it('display export rejects missing fixed bytes without current-content fallback', async () => {
+      const id=await page(), first=await save(id);await worker.tick();tree().delete(`.sop/versions/${first.id}.json`);
+      await expect(historyFor().service.displaySource(id,first.id,viewer())).rejects.toThrow('unavailable or invalid');
+    });
+
     const nativeServices = () => {
       const events = { emit: jest.fn() };
       const pages = new PageRepo(db, {} as any, events as any);

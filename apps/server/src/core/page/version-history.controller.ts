@@ -59,6 +59,12 @@ export class VersionHistoryController {
   info(@Body() dto: VersionReadDto, @AuthUser() user: User) {
     return this.history.read(dto.pageId, dto.versionId, user);
   }
+  @Post('display-source')
+  @HttpCode(HttpStatus.OK)
+  @OAuthScope('read')
+  displaySource(@Body() dto: VersionReadDto, @AuthUser() user: User) {
+    return this.history.displaySource(dto.pageId, dto.versionId, user);
+  }
   @Post('options')
   @HttpCode(HttpStatus.OK)
   @OAuthScope('read')

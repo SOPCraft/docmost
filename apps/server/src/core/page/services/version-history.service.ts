@@ -221,7 +221,7 @@ export class VersionHistoryService {
       baseline: base ? { id: base.id, revision: base.revision } : null,
     };
   }
-  async read(pageId: string, versionId: string, user: User) {
+  private async readVerified(pageId: string, versionId: string, user: User) {
     const page = await this.authorize(pageId, user);
     if (!readVersioningConfig().enabled)
       throw new ConflictException('Version history is disabled');
@@ -282,17 +282,52 @@ export class VersionHistoryService {
     const authorized = await this.authorize(page.id, user);
     if (authorized.spaceId !== page.spaceId)
       throw new ConflictException('Page location changed');
+    return { task, snapshot: envelope.snapshot, page };
+  }
+  async read(pageId: string, versionId: string, user: User) {
+    const { task, snapshot } = await this.readVerified(pageId, versionId, user);
     return {
       id: task.id,
       revision: task.revision,
       commitSha: task.commitSha,
       createdAt: task.createdAt,
-      actors: envelope.snapshot.actors,
-      scope: envelope.snapshot.scope,
-      exclusions: envelope.snapshot.exclusions,
-      title: envelope.snapshot.page.title,
-      content: safeHistoryContent(envelope.snapshot.page.content),
-      deletedAt: envelope.snapshot.page.deletedAt,
+      actors: snapshot.actors,
+      scope: snapshot.scope,
+      exclusions: snapshot.exclusions,
+      title: snapshot.page.title,
+      content: safeHistoryContent(snapshot.page.content),
+      deletedAt: snapshot.page.deletedAt,
+    };
+  }
+  // Dedicated authenticated export, not the history viewer's safe projection.
+  // It only accepts the current, repository-verified revision. Media bytes must
+  // subsequently be captured with the same user's attachment permissions.
+  async displaySource(pageId: string, versionId: string, user: User) {
+    const { task, snapshot, page } = await this.readVerified(pageId, versionId, user);
+    const current = await this.pages.findById(page.id, { includeContent: true });
+    if (!current || current.workspaceId !== user.workspaceId || current.spaceId !== page.spaceId)
+      throw new NotFoundException('Page not found');
+    if (current.deletedAt || snapshot.page.deletedAt)
+      throw new ConflictException('Deleted source is not available for display');
+    const latest = (await sql<{ id: string }>`SELECT id FROM sop_page_versions
+      WHERE workspace_id=${user.workspaceId}::uuid AND space_id=${page.spaceId}::uuid
+      AND page_id=${page.id}::uuid ORDER BY revision DESC LIMIT 1`.execute(this.db)).rows[0];
+    if (latest?.id !== task.id || current.title !== snapshot.page.title ||
+        canonicalJson(current.content) !== canonicalJson(snapshot.page.content))
+      throw new ConflictException('Source changed or latest revision has not reached the repository');
+    const checked = await this.authorize(page.id, user);
+    if (checked.spaceId !== page.spaceId || checked.deletedAt)
+      throw new ConflictException('Page location or availability changed');
+    return {
+      schema: 'sop.display-source/1',
+      pageId: page.id,
+      versionId: task.id,
+      revision: task.revision,
+      commit: task.commitSha,
+      snapshotSha256: task.snapshotSha256.trim(),
+      title: snapshot.page.title,
+      content: JSON.parse(canonicalJson(snapshot.page.content)),
+      mediaPolicy: 'capture-current-authorized-bytes',
     };
   }
 }
