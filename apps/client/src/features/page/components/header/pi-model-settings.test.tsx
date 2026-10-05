@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import PiModelSettings from './pi-model-settings';
 import { editModel, groupProviders, modelErrors, newModel } from './pi-model-config';
@@ -20,6 +20,35 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();vi.unstubAllGlobals();});
 describe('provider-oriented model settings',()=>{
+ it('discarding dirty connection values really restores them even if the next action is cancelled',async()=>{
+  await ready();fireEvent.change(screen.getByLabelText('服务地址'),{target:{value:'https://unsaved.invalid/v1'}});
+  fireEvent.change(screen.getByLabelText('访问密钥'),{target:{value:'synthetic-unsaved-secret'}});
+  fireEvent.click(screen.getByRole('button',{name:'移除模型 model-one'}));fireEvent.click(screen.getByRole('button',{name:'放弃修改'}));
+  const dialog=screen.getByRole('dialog',{name:'移除这个模型？'});fireEvent.click(within(dialog).getByRole('button',{name:'取消'}));
+  expect((screen.getByLabelText('服务地址') as HTMLInputElement).value).toBe(saved.baseUrl);
+  expect((screen.getByLabelText('访问密钥') as HTMLInputElement).value).toBe('');
+  expect(mocks.request.mock.calls.some(([route])=>route==='save-model')).toBe(false);
+ });
+ it('reopening after a pending save cannot leave the fresh settings permanently busy',async()=>{
+  const rendered=render(renderSettings());await screen.findByText('日常模型');
+  let finish!:(value:unknown)=>void;mocks.request.mockImplementationOnce(()=>new Promise(resolve=>finish=resolve));
+  fireEvent.change(screen.getByLabelText('服务地址'),{target:{value:'https://pending.invalid/v1'}});fireEvent.click(screen.getByRole('button',{name:'保存连接'}));
+  await waitFor(()=>expect(finish).toBeTypeOf('function'));
+  rendered.rerender(renderSettings(false));rendered.rerender(renderSettings(true));await screen.findByText('日常模型');
+  expect((screen.getByRole('button',{name:'添加服务商'}) as HTMLButtonElement).disabled).toBe(false);
+  await act(async()=>finish({...settings,models:[{...saved,label:'late-old-save'}]}));
+  expect(screen.queryByText('late-old-save')).toBeNull();expect(mocks.onSaved).not.toHaveBeenCalled();
+ });
+ it('locks editable controls while explicitly reloading configuration instead of discarding newly typed edits',async()=>{
+  await ready();mocks.request.mockRejectedValueOnce(new Error('failure'));
+  fireEvent.change(screen.getByLabelText('服务地址'),{target:{value:'https://unsaved.invalid/v1'}});fireEvent.click(screen.getByRole('button',{name:'保存连接'}));await screen.findByText('配置未保存，请检查后重试。');
+  let finish!:(value:unknown)=>void;mocks.request.mockImplementationOnce(()=>new Promise(resolve=>finish=resolve));
+  fireEvent.click(screen.getByRole('button',{name:'重新读取配置'}));fireEvent.click(screen.getByRole('button',{name:'放弃修改'}));await waitFor(()=>expect(finish).toBeTypeOf('function'));
+  expect((screen.getByLabelText('服务地址').closest('fieldset') as HTMLFieldSetElement).disabled).toBe(true);
+  await act(async()=>finish(settings));await screen.findByText('日常模型');
+  expect((screen.getByLabelText('服务地址').closest('fieldset') as HTMLFieldSetElement).disabled).toBe(false);
+ });
+
  it('groups models under one service and keeps advanced fields out of the main list',async()=>{await ready();expect(screen.getByRole('navigation',{name:'模型服务商'})).toBeTruthy();expect(screen.getByRole('region',{name:'服务商模型列表'})).toBeTruthy();expect(screen.getByText('第二模型')).toBeTruthy();expect(screen.queryByLabelText('上下文上限')).toBeNull();expect((screen.getByLabelText('访问密钥') as HTMLInputElement).value).toBe('');});
  it('adds a model to an existing service without requesting or exposing the stored credential',async()=>{await ready();fireEvent.click(screen.getByRole('button',{name:'添加模型'}));fireEvent.change(screen.getByLabelText('模型编号'),{target:{value:'new-model'}});fireEvent.change(screen.getByLabelText('显示名称'),{target:{value:'新增模型'}});fireEvent.click(screen.getByRole('button',{name:'保存模型'}));await waitFor(()=>expect(mocks.onSaved).toHaveBeenCalledTimes(1));const body=mocks.request.mock.calls.find(([route])=>route==='save-model')?.[1];expect(body.model.apiKey).toBe('');expect(body.model.provider).toBe('internal');expect(body.model.baseUrl).toBe(saved.baseUrl);expect(body.revision).toBe('10000000-0000-4000-8000-000000000001');expect(body.model.configured).toBeUndefined();});
  it('rejects duplicate model identifiers before sending any write',async()=>{await ready();fireEvent.click(screen.getByRole('button',{name:'添加模型'}));fireEvent.change(screen.getByLabelText('模型编号'),{target:{value:'model-one'}});fireEvent.click(screen.getByRole('button',{name:'保存模型'}));await screen.findByText(/这个模型已经存在/);expect(mocks.request.mock.calls.some(([route])=>route==='save-model')).toBe(false);});

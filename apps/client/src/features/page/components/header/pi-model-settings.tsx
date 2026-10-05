@@ -18,6 +18,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
   const nextAction = useRef<(() => void) | null>(null), epoch = useRef(0);
   const groups = groupProviders(settings?.models || []), group = groups.find(item => item.id === selection);
   const dirty = !!baseline && JSON.stringify(form) !== baseline;
+  const locked = busy || loading;
   function reset(value: ModelForm, next: typeof editing) {
     setForm(value); setBaseline(JSON.stringify(value)); setEditing(next); setFields({}); setError(''); setNotice(''); setAdvanced(false);
   }
@@ -40,9 +41,9 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
   }
   useEffect(() => {
     if (!opened) return;
-    const controller = new AbortController(); setSettings(null); setSearch(''); setNotice(''); setSelection(null); setEditing(null); setBaseline('');
+    const controller = new AbortController(); setBusy(false); setSettings(null); setSearch(''); setNotice(''); setSelection(null); setEditing(null); setBaseline('');
     void load(controller.signal);
-    return () => { epoch.current++; controller.abort(); setForm(newModel()); setBaseline(''); setDiscard(false); setDeleting(null); nextAction.current = null; };
+    return () => { epoch.current++; controller.abort(); setBusy(false); setLoading(false); setForm(newModel()); setBaseline(''); setDiscard(false); setDeleting(null); nextAction.current = null; };
   }, [opened]);
   const change = (key: keyof ModelForm, value: unknown) => { setForm(current => ({ ...current, [key]: value })); setNotice(''); setFields(current => ({ ...current, [key]: '' })); };
   function addProvider(api = 'openai-completions') {
@@ -56,7 +57,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
     navigate(() => { const connection = group.models[0]; reset({ ...newModel(group.id), api: connection.api, baseUrl: connection.baseUrl }, { original: null, providerNew: false }); });
   }
   async function save(remove = false) {
-    if (!settings || busy) return;
+    if (!settings || locked) return;
     const payload = remove && deleting ? editModel(deleting) : { ...form, modelId: form.modelId.trim(), baseUrl: form.baseUrl.trim() };
     if (!remove) {
       const errors = modelErrors(payload, settings, !editing || editing.original !== null);
@@ -77,7 +78,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
   const visibleGroups = groups.filter(item => `${providerName(item.id)} ${item.id}`.toLowerCase().includes(search.toLowerCase()));
   const connectionFields = (
     <section className={styles.section} aria-label="服务连接配置">
-      <div className={styles.sectionHeading}><IconKey size={16} /><Text size="sm" fw={600}>连接配置</Text>{group && !editing && <Button size="compact-xs" variant="subtle" disabled={!dirty || busy} onClick={() => void save()}>保存连接</Button>}</div>
+      <div className={styles.sectionHeading}><IconKey size={16} /><Text size="sm" fw={600}>连接配置</Text>{group && !editing && <Button size="compact-xs" variant="subtle" disabled={!dirty || locked} onClick={() => void save()}>保存连接</Button>}</div>
       <div className={styles.connectionFields}>
         {providerNew && <TextInput className={styles.fullField} label="服务商标识" description="给这组连接取一个唯一标识，例如 qwen（千问）或 company（公司服务）。" value={form.provider} onChange={event => change('provider', event.currentTarget.value)} error={fields.provider} autoComplete="off" />}
         <Select label="接口协议" data={protocols} value={form.api} onChange={value => value && change('api', value)} error={fields.api} />
@@ -91,30 +92,30 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
     <Modal opened={opened} onClose={() => navigate(onClose)} title={<Group gap={10}><span className={styles.titleIcon}><IconCpu size={20} /></span><div><Text fw={600}>模型服务</Text><Text size="xs" c="dimmed">管理连接与可用模型</Text></div></Group>} size="min(980px, calc(100vw - 32px))" centered padding={0} radius={14} classNames={{ header: styles.modalHeader, content: styles.modal, body: styles.modalBody }} closeOnClickOutside={false} closeOnEscape={!busy && !discard && !deleting} closeButtonProps={{ disabled: busy, 'aria-label': '关闭模型设置' }}>
       <div className={styles.layout} data-testid="pi-model-services">
         <nav className={styles.providers} aria-label="模型服务商">
-          <div className={styles.navHeading}><Text size="xs" fw={600} c="dimmed">服务商</Text><Tooltip label="添加服务商"><ActionIcon variant="subtle" color="gray" aria-label="添加服务商" disabled={!settings || busy} onClick={() => addProvider()}><IconPlus size={16} /></ActionIcon></Tooltip></div>
+          <div className={styles.navHeading}><Text size="xs" fw={600} c="dimmed">服务商</Text><Tooltip label="添加服务商"><ActionIcon variant="subtle" color="gray" aria-label="添加服务商" disabled={!settings || locked} onClick={() => addProvider()}><IconPlus size={16} /></ActionIcon></Tooltip></div>
           <TextInput aria-label="搜索服务商" placeholder="搜索服务商" size="xs" leftSection={<IconSearch size={14} />} value={search} onChange={event => setSearch(event.currentTarget.value)} classNames={{ input: styles.searchInput }} />
           <div className={styles.providerList}>
             {loading && <div className={styles.loading}><Loader size="sm" /><Text size="xs">正在读取配置</Text></div>}
-            {visibleGroups.map(item => <button type="button" className={styles.provider} key={item.id} aria-pressed={selection === item.id} disabled={busy} onClick={() => navigate(() => selectProvider(item.id))}>
+            {visibleGroups.map(item => <button type="button" className={styles.provider} key={item.id} aria-pressed={selection === item.id} disabled={locked} onClick={() => navigate(() => selectProvider(item.id))}>
               <span className={styles.providerIcon}><IconPlugConnected size={17} /></span><span className={styles.providerName}><span>{providerName(item.id)}</span><small><i />已配置 · {item.models.length}个模型</small></span>
             </button>)}
             {providerNew && <div className={`${styles.provider} ${styles.newProvider}`}><span className={styles.providerIcon}><IconPlus size={17} /></span><span className={styles.providerName}>新服务商<small>尚未保存</small></span></div>}
             {!loading && !providerNew && !groups.length && <Text size="xs" c="dimmed" px={8} py="md">还没有配置服务商</Text>}
             {!!groups.length && !visibleGroups.length && <Text size="xs" c="dimmed" p="xs">没有匹配的服务商</Text>}
           </div>
-          <Button leftSection={<IconPlus size={14} />} variant="default" size="xs" fullWidth disabled={!settings || busy} onClick={() => addProvider()}>添加新的服务商</Button>
+          <Button leftSection={<IconPlus size={14} />} variant="default" size="xs" fullWidth disabled={!settings || locked} onClick={() => addProvider()}>添加新的服务商</Button>
           <div className={styles.security}><IconLock size={13} /><span>仅工作空间管理员可修改</span></div>
         </nav>
         <div className={styles.main}>
           <div className={styles.mainScroll}>
-            {error && <Alert color="red" mb="md" title="操作未完成">{error}<Button variant="subtle" size="compact-xs" disabled={busy} onClick={() => navigate(() => { void load(); })}>重新读取配置</Button></Alert>}
+            {error && <Alert color="red" mb="md" title="操作未完成">{error}<Button variant="subtle" size="compact-xs" disabled={locked} onClick={() => navigate(() => { void load(); })}>重新读取配置</Button></Alert>}
             {notice && <div className={styles.savedNotice} role="status">{notice}</div>}
             {!loading && settings && !group && !editing && <div className={styles.welcome}>
               <div className={styles.welcomeIcon}><IconPlugConnected size={27} /></div><Text fw={600} size="lg">连接你的模型服务</Text><Text size="sm" c="dimmed">先添加服务商，再管理这组连接下的模型。对话中随时切换，无需重复填写密钥。</Text>
               <div className={styles.protocolCards}>{protocols.map(item => <button key={item.value} type="button" onClick={() => addProvider(item.value)}><IconCpu size={18} /><span>{item.label}</span><IconPlus size={15} /></button>)}</div>
               <Text size="xs" c="dimmed">使用已有的模型账号与接口地址，不会自动开通或购买服务。</Text>
             </div>}
-            {(group || editing) && <fieldset className={styles.fieldset} disabled={busy || !settings}>
+            {(group || editing) && <fieldset className={styles.fieldset} disabled={locked || !settings}>
               <div className={styles.providerHeader}><span className={styles.providerHeroIcon}><IconPlugConnected size={21} /></span><div><Text fw={600}>{providerNew ? '添加服务商' : providerName(form.provider)}</Text><Text size="xs" c="dimmed">{providerNew ? '保存首个模型后，这组服务即会出现在列表中' : `${form.provider} · 模型与连接独立管理`}</Text></div>{group && <Badge variant="light" color="gray" size="sm">已配置</Badge>}</div>
               {(!editing || providerNew) && connectionFields}
               {editing ? <section className={styles.section} data-testid="pi-model-editor">
@@ -140,7 +141,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
         </div>
       </div>
     </Modal>
-    <Modal opened={discard} onClose={() => { setDiscard(false); nextAction.current = null; }} title="放弃未保存的修改？" centered size="sm" radius="md"><Text size="sm" c="dimmed">尚未保存的连接或模型修改将被丢弃，已保存配置不会改变。</Text><Group justify="flex-end" mt="lg"><Button variant="default" onClick={() => { setDiscard(false); nextAction.current = null; }}>继续编辑</Button><Button color="red" onClick={() => { const action = nextAction.current; nextAction.current = null; setDiscard(false); action?.(); }}>放弃修改</Button></Group></Modal>
+    <Modal opened={discard} onClose={() => { setDiscard(false); nextAction.current = null; }} title="放弃未保存的修改？" centered size="sm" radius="md"><Text size="sm" c="dimmed">尚未保存的连接或模型修改将被丢弃，已保存配置不会改变。</Text><Group justify="flex-end" mt="lg"><Button variant="default" onClick={() => { setDiscard(false); nextAction.current = null; }}>继续编辑</Button><Button color="red" onClick={() => { const action = nextAction.current; nextAction.current = null; if (baseline) setForm(JSON.parse(baseline)); setFields({}); setDiscard(false); action?.(); }}>放弃修改</Button></Group></Modal>
     <Modal opened={!!deleting} onClose={() => { if (!busy) setDeleting(null); }} title="移除这个模型？" centered size="sm" radius="md" closeOnEscape={!busy} closeOnClickOutside={false} closeButtonProps={{ disabled: busy }}><Text size="sm">{deleting?.label || deleting?.modelId}</Text><Text size="sm" c="dimmed" mt="xs">仅移除可选模型，不删除文档或历史会话。</Text><Group justify="flex-end" mt="lg"><Button variant="default" disabled={busy} onClick={() => setDeleting(null)}>取消</Button><Button color="red" loading={busy} onClick={() => void save(true)}>确认移除</Button></Group></Modal>
   </>;
 }

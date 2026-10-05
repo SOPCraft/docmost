@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActionIcon, Button, Group, Loader, Menu, Select, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Group, Loader, Menu, Modal, Select, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconDots, IconPaperclip, IconRefresh, IconX, IconSettings2, IconRoute, IconChecklist, IconWand, IconArrowUpRight, IconFileText } from '@tabler/icons-react';
+import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconPaperclip, IconRefresh, IconX, IconSettings2, IconRoute, IconChecklist, IconWand, IconArrowUpRight, IconFileText } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router-dom';
@@ -14,6 +14,8 @@ import { PiConversation, PiView, piError, piRequest, selectedConversationKey } f
 import { PiTranscript } from './pi-workbench-messages';
 import PiWorkbenchQuestion from './pi-workbench-question';
 import PiModelSettings from './pi-model-settings';
+import PiWorkbenchActions from './pi-workbench-actions';
+import brand from './pi-brand.module.css';
 import classes from './pi-workbench.module.css';
 
 type Candidate={id:string;title:string};
@@ -69,6 +71,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     await client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId,target]});return response.data;
   }
   async function act(type:string,fields:Record<string,unknown>={}){
+    if(posting || !sessionId || accessFailed)return;
     const generation=epoch.current,target=sessionId;setPosting(true);setError('');
     try{const result=await command(type,fields,target);if(epoch.current===generation)setInspection(result??'操作已由原生执行器确认');}
     catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
@@ -128,24 +131,14 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       <Select className={classes.sessionSelect} aria-label="选择对话" placeholder="新对话" size="xs" style={{flex:1,minWidth:0}} value={sessionId||null} data={(sessions.isError?[]:sessions.data?.items||[]).map(item=>({value:item.id,label:item.title||'新对话'}))} onChange={value=>value&&choose(value)} searchable nothingFoundMessage="暂无对话" disabled={posting}/>
       <Tooltip label="新对话"><ActionIcon variant="subtle" color="gray" aria-label="新对话" disabled={posting||!ready} onClick={()=>void startNew()}><IconPlus size={17}/></ActionIcon></Tooltip>
       <Tooltip label="刷新会话"><ActionIcon variant="subtle" color="gray" aria-label="刷新会话" onClick={()=>void refresh()}><IconRefresh size={16}/></ActionIcon></Tooltip>
-      {status.data?.canManageModels&&<Tooltip label="模型服务设置"><ActionIcon variant="subtle" color="gray" aria-label="模型服务设置" onClick={()=>setModelSettings(true)}><IconSettings2 size={16}/></ActionIcon></Tooltip>}
-      <Menu position="bottom-end"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="更多会话操作"><IconDots size={17}/></ActionIcon></Menu.Target><Menu.Dropdown>
-        <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void act('clone')}>克隆当前会话分支</Menu.Item>
-        <Menu.Item disabled={!sessionId||busy||accessFailed} onClick={()=>void act('compact')}>整理长对话上下文</Menu.Item>
-        <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void act('clear_queue')}>清空追加队列</Menu.Item>
-        <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void act('get_session_stats')}>查看真实用量统计</Menu.Item>
-        <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void act('export_html')}>导出对话网页</Menu.Item>
-        <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void loadFiles()}>查看生成文件</Menu.Item>
-        {status.data?.canManageModels&&<Menu.Item onClick={()=>setModelSettings(true)}>模型设置</Menu.Item>}
-        <Menu.Item onClick={()=>setAdvanced(value=>!value)}>完整原生控制</Menu.Item>
-      </Menu.Dropdown></Menu>
+      <PiWorkbenchActions canManageModels={!!status.data?.canManageModels&&!status.isError} sessionAvailable={!!sessionId&&!accessFailed&&!!data} busy={busy} posting={posting} onModels={()=>setModelSettings(true)} onCommand={type=>void act(type)} onFiles={()=>void loadFiles()} onAdvanced={()=>setAdvanced(true)}/>
     </div>
-    {advanced&&<div className={classes.controls}><Stack gap="xs">
+    <Modal opened={advanced&&opened} onClose={()=>setAdvanced(false)} title="高级工具" size="md" centered closeOnClickOutside={false} closeButtonProps={{"aria-label":"关闭高级工具"}}><Text data-autofocus tabIndex={-1} size="xs" c="dimmed" mb="md">完整原生控制，仅在需要时使用；不会替代日常对话。</Text><Stack gap="xs">
       <Select label="原生能力" size="xs" value={operation} onChange={value=>value&&setOperation(value)} data={(data?.protocolCommands||Object.keys(labels)).map(value=>({value,label:labels[value]||`${value}（原生操作）`}))} searchable/>
       <Textarea label="操作参数" description="高级控制使用原生参数对象；普通聊天不需要填写。" value={parameters} onChange={event=>setParameters(event.currentTarget.value)} autosize minRows={2} maxRows={5} size="xs"/>
       <Button size="xs" variant="default" disabled={!sessionId||posting||accessFailed} onClick={()=>{try{const fields=JSON.parse(parameters);if(!fields||typeof fields!=='object'||Array.isArray(fields))throw new Error();void act(operation,fields);}catch{setError('操作参数必须是对象。');}}}>执行选定操作</Button>
       {data?.sessions?.length>0&&<Select label="恢复原生历史会话" size="xs" data={data.sessions.map(item=>({value:item.path,label:item.name}))} value={data.state.sessionFile||null} onChange={value=>value&&void act('switch_session',{sessionPath:value})}/>}
-    </Stack></div>}
+    </Stack></Modal>
     <div className={classes.transcript} ref={transcript} onScroll={()=>{const node=transcript.current;if(node)followBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<60;}} aria-live="polite" aria-label="智能体对话记录">
       {!data?.messages?.length&&<div className={classes.empty}><div className={classes.emptyIcon}><IconSparkles size={22}/></div><div className={classes.emptyTitle}>从这份资料开始</div><div className={classes.emptyDescription}>一起梳理流程、补齐缺项，把经验变成可以反复使用的方法。</div>
         <div className={classes.suggestions}>{[{text:'梳理这份文档的关键步骤',Icon:IconRoute},{text:'找出流程中的缺项与冲突',Icon:IconChecklist},{text:'把已有经验整理成可复用技能',Icon:IconWand}].map(({text:value,Icon})=><button type="button" className={classes.suggestion} key={value} onClick={()=>setText(value)}><Icon size={17}/><span>{value}</span><IconArrowUpRight size={14}/></button>)}</div>
@@ -171,7 +164,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
         <input ref={fileInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event=>void loadImage(event.target.files?.[0])}/>
         <Menu position="top-start"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="选择技能与命令"><IconSparkles size={15}/></ActionIcon></Menu.Target><Menu.Dropdown>{data?.commands?.length?data.commands.map(item=><Menu.Item key={item.name} onClick={()=>setText(`/${item.name} ${text}`)}>{item.description||`${item.name}（${item.source==='skill'?'技能':'命令'}）`}</Menu.Item>):<Menu.Item disabled>会话启动后加载原生技能</Menu.Item>}</Menu.Dropdown></Menu>
         <div className={classes.model}>{!configured&&status.data?.canManageModels?<button type="button" className={classes.setupModel} onClick={()=>setModelSettings(true)}><IconSettings2 size={13}/>配置模型</button>:<Select aria-label="模型" placeholder="未配置模型" size="xs" value={data?.state.model?`${data.state.model.provider}/${data.state.model.id}`:null} data={(data?.models||[]).map(model=>({value:`${model.provider}/${model.id}`,label:`${model.name||model.id}（模型）`}))} disabled={!sessionId||posting||busy||accessFailed} onChange={value=>{const model=data?.models.find(item=>`${item.provider}/${item.id}`===value);if(model)void act('set_model',{provider:model.provider,modelId:model.id});}}/>}</div>
-        {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" aria-label="发送消息" disabled={!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/'))} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
+        {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" className={brand.send} aria-label="发送消息" title={!configured&&!text.trim().startsWith("/")?"请先配置模型":"发送消息"} disabled={!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/'))} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
       </div>
       {busy&&<Group px="xs" pb="xs" gap={6}><Select aria-label="运行中补充方式" size="xs" value={mode} onChange={value=>value&&setMode(value)} data={[{value:'steer',label:'纠正当前任务'},{value:'followUp',label:'排队追加任务'}]} style={{flex:1}}/><Button size="xs" disabled={!text.trim()||posting||unknown||accessFailed} onClick={()=>void send()}>追加</Button></Group>}
     </div>

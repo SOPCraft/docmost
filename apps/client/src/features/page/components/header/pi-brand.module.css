@@ -1,0 +1,30 @@
+.trigger {
+  color: var(--mantine-primary-color-light-color);
+  border-radius: var(--mantine-radius-sm);
+}
+.trigger[data-active="true"] {
+  background: var(--mantine-primary-color-light);
+}
+.trigger:hover {
+  background: var(--mantine-primary-color-light-hover);
+}
+.trigger:focus-visible,
+.send:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+.send.send {
+  background: var(--mantine-primary-color-filled);
+  color: var(--mantine-color-white);
+}
+.send.send:hover:not(:disabled) {
+  background: var(--mantine-primary-color-filled-hover);
+}
+/* Brand-tinted, but deliberately lighter and still genuinely disabled. */
+.send.send:disabled,
+.send.send[data-disabled] {
+  background: var(--mantine-primary-color-light);
+  color: var(--mantine-primary-color-light-color);
+  opacity: 0.48;
+  cursor: not-allowed;
+}
