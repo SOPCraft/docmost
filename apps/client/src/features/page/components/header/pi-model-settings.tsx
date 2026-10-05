@@ -29,7 +29,8 @@ export default function PiModelSettings({opened,onClose,onSaved}:{opened:boolean
  const entries=view?serviceEntries(view,category):[];
  if(category==='chat'&&custom&&!entries.some(entry=>entry.id===custom.id))entries.push(custom);
  const entry=entries.find(item=>item.id===selected[category])||entries[0];
- const filtered=entries.filter(item=>(item.name+' '+item.id).toLowerCase().includes(search.toLowerCase()));
+ const providerRank=(item:ServiceEntry)=>item.connection?.status.state==='passed'?0:item.connection?.configured?1:2;
+ const filtered=entries.filter(item=>(item.name+' '+item.id).toLowerCase().includes(search.toLowerCase())).sort((a,b)=>providerRank(a)-providerRank(b));
  const configuredCount=view?.connections.filter(item=>item.configured).length||0;
  if(legacy)return <LegacyModelSettings opened={opened} onClose={onClose} onSaved={onSaved}/>;
  return <>
