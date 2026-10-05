@@ -37,3 +37,36 @@
 .error { color:var(--mantine-color-red-light-color); font-size:12px; line-height:1.6; margin:8px 0; }
 .image { max-width:100%; max-height:160px; border-radius:6px; margin-top:8px; display:block; }
 .controls { max-height:260px; overflow:auto; flex-shrink:0; padding:10px 0; border-bottom:1px solid var(--mantine-color-default-border); }
+
+/* Native chat surface refinements. */
+.sessionSelect input { border:0; background:transparent; font-size:12px; font-weight:500; padding-left:7px; border-radius:7px; }
+.sessionSelect input:hover { background:var(--mantine-color-default-hover); }
+.toolbar { gap:4px; padding-bottom:10px; }
+.toolbar button { border-radius:7px; }
+.transcript { padding:18px 2px 22px; scrollbar-color:var(--mantine-color-default-border) transparent; }
+.empty { padding:clamp(8px,4vh,36px) 0 18px; gap:12px; }
+.emptyIcon { width:44px; height:44px; border-radius:13px; background:var(--mantine-color-body); color:var(--mantine-color-text); margin-bottom:4px; }
+.emptyTitle { font-size:18px; font-weight:600; line-height:1.4; letter-spacing:-.4px; }
+.emptyDescription { font-size:12px; color:var(--mantine-color-dimmed); line-height:1.8; margin-bottom:8px; }
+.suggestions { width:100%; display:flex; flex-direction:column; gap:7px; }
+.suggestion { display:flex; align-items:center; gap:11px; padding:13px 12px; border-radius:10px; font-size:12px; background:var(--mantine-color-body); }
+.suggestion>span { flex:1; }
+.suggestion>svg { flex-shrink:0; color:var(--mantine-color-dimmed); }
+.suggestion>svg:last-child { opacity:.55; }
+.suggestion:focus-visible { outline:2px solid var(--mantine-primary-color-filled); outline-offset:2px; }
+.message { font-size:13px; line-height:1.8; }
+.user { padding:11px 14px; border-radius:12px 12px 3px 12px; }
+.tool { border-radius:9px; font-size:11px; background:var(--mantine-color-body); }
+.question { border-color:var(--mantine-color-default-border); border-left:3px solid var(--mantine-primary-color-filled); background:var(--mantine-color-body); border-radius:10px; padding:15px; }
+.composerDock { flex-shrink:0; padding-top:8px; }
+.sources { padding:0 0 9px; max-height:76px; }
+.source { background:var(--mantine-color-body); color:var(--mantine-color-dimmed); padding:4px 7px; border-radius:6px; font-size:10px; }
+.composer { border-radius:13px; box-shadow:0 2px 8px rgba(0,0,0,.03); }
+.composerInput { line-height:1.7!important; padding:13px 13px 8px!important; }
+.composerBar { gap:2px; padding:5px 8px 9px; }
+.composerBar button { border-radius:7px; flex-shrink:0; }
+.model input { font-size:10px; }
+.setupModel { display:flex; align-items:center; gap:5px; padding:5px 7px; border:0; border-radius:6px; font:inherit; font-size:11px; color:var(--mantine-color-dimmed); background:transparent; cursor:pointer; }
+.setupModel:hover { background:var(--mantine-color-default-hover); color:var(--mantine-color-text); }
+.hint { font-size:10px; padding:9px 2px 0; }
+@media(max-height:680px) { .empty { padding-top:4px; gap:9px; } .suggestion { padding:9px 11px; } .emptyIcon { width:34px; height:34px; } .emptyTitle { font-size:16px; } }
