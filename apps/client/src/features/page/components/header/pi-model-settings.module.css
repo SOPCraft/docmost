@@ -20,7 +20,7 @@
 .mainScroll { flex:1; min-height:0; overflow:auto; padding:26px 28px; overscroll-behavior:contain; scrollbar-width:thin; }
 .fieldset { border:0; padding:0; margin:0; min-width:0; }
 .providerHeader { display:flex; align-items:center; gap:12px; padding-bottom:24px; }
-.providerHeader>div { flex:1; min-width:0; overflow-wrap:anywhere; }
+.providerHeader>div:nth-child(2) { flex:1; min-width:0; overflow-wrap:anywhere; }
 .section { padding:22px 0; border-top:1px solid var(--mantine-color-default-border); }
 .section:last-child { padding-bottom:0; }
 .sectionHeading { display:flex; align-items:center; gap:8px; color:var(--mantine-color-text); margin-bottom:16px; }
@@ -52,7 +52,7 @@
 .provider:focus-visible,.protocolCards button:focus-visible,.advancedToggle:focus-visible { outline:2px solid var(--mantine-primary-color-filled); outline-offset:2px; }
 @media(max-width:650px) {
  .modalHeader { padding:13px 16px; }
- .layout { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); height:calc(100dvh - 125px); min-height:280px; }
+ .layout { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); height:calc(100dvh - 175px); min-height:240px; }
  .providers { border-right:0; border-bottom:1px solid var(--mantine-color-default-border); padding:8px 12px; gap:7px; max-height:164px; }
  .providers>.security,.providers>div:has(>.searchInput),.providers>button { display:none; }
  .providerList { flex:none; flex-direction:row; overflow-x:auto; overflow-y:hidden; }
@@ -64,3 +64,15 @@
  .welcome { margin:8px auto; }
  .advanced { grid-template-columns:1fr; }
 }
+
+.connectionFields { display:grid; grid-template-columns:minmax(140px,.85fr) minmax(0,1.6fr); gap:12px 14px; }
+.fullField,.connectionFields>.endpoint { grid-column:1/-1; }
+.connectionFields .endpoint { padding:6px 9px; margin:0; flex-direction:row; gap:9px; align-items:baseline; }
+.connectionFields .endpoint>span { white-space:nowrap; }
+.connectionFields .endpoint code { font-size:10px; }
+.savedNotice { border-left:2px solid var(--mantine-color-teal-6); padding:7px 10px; margin-bottom:14px; font-size:12px; color:var(--mantine-color-dimmed); background:var(--mantine-color-default-hover); border-radius:4px; }
+.providerHeader { padding-bottom:18px; }
+.section { padding-top:17px; padding-bottom:17px; }
+.sectionHeading { margin-bottom:13px; }
+.modelCard { padding-top:10px; padding-bottom:10px; }
+@media(max-width:650px) { .connectionFields { grid-template-columns:1fr; } .connectionFields .endpoint { flex-direction:column; gap:3px; } .layout { min-height:0; } }

@@ -78,13 +78,13 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
   const connectionFields = (
     <section className={styles.section} aria-label="服务连接配置">
       <div className={styles.sectionHeading}><IconKey size={16} /><Text size="sm" fw={600}>连接配置</Text>{group && !editing && <Button size="compact-xs" variant="subtle" disabled={!dirty || busy} onClick={() => void save()}>保存连接</Button>}</div>
-      <Stack gap="md">
-        {providerNew && <TextInput label="服务商标识" description="给这组连接取一个唯一标识，例如 qwen（千问）或 company（公司服务）。" value={form.provider} onChange={event => change('provider', event.currentTarget.value)} error={fields.provider} autoComplete="off" />}
+      <div className={styles.connectionFields}>
+        {providerNew && <TextInput className={styles.fullField} label="服务商标识" description="给这组连接取一个唯一标识，例如 qwen（千问）或 company（公司服务）。" value={form.provider} onChange={event => change('provider', event.currentTarget.value)} error={fields.provider} autoComplete="off" />}
         <Select label="接口协议" data={protocols} value={form.api} onChange={value => value && change('api', value)} error={fields.api} />
         <TextInput label="服务地址" placeholder="粘贴服务商提供的接口基础地址" value={form.baseUrl} onChange={event => change('baseUrl', event.currentTarget.value)} error={fields.baseUrl} autoComplete="off" spellCheck={false} />
         {endpointPreview(form) && <div className={styles.endpoint}><span>请求地址</span><code>{endpointPreview(form)}</code></div>}
-        <PasswordInput label="访问密钥" placeholder={group ? '已保存 · 留空保留当前密钥' : '填写服务商的访问密钥'} description={group ? '同一服务商的模型共用这组连接，保存连接会同步更新。' : '只写入服务端加密配置，不保存在浏览器。'} value={form.apiKey} onChange={event => change('apiKey', event.currentTarget.value)} error={fields.apiKey} autoComplete="new-password" />
-      </Stack>
+        <PasswordInput className={styles.fullField} label="访问密钥" placeholder={group ? '已保存 · 留空保留当前密钥' : '填写服务商的访问密钥'} description={group ? '同一服务商的模型共用这组连接，保存连接会同步更新。' : '只写入服务端加密配置，不保存在浏览器。'} value={form.apiKey} onChange={event => change('apiKey', event.currentTarget.value)} error={fields.apiKey} autoComplete="new-password" />
+      </div>
     </section>
   );
   return <>
@@ -108,7 +108,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
         <div className={styles.main}>
           <div className={styles.mainScroll}>
             {error && <Alert color="red" mb="md" title="操作未完成">{error}<Button variant="subtle" size="compact-xs" disabled={busy} onClick={() => navigate(() => { void load(); })}>重新读取配置</Button></Alert>}
-            {notice && <Alert color="green" mb="md" role="status">{notice}</Alert>}
+            {notice && <div className={styles.savedNotice} role="status">{notice}</div>}
             {!loading && settings && !group && !editing && <div className={styles.welcome}>
               <div className={styles.welcomeIcon}><IconPlugConnected size={27} /></div><Text fw={600} size="lg">连接你的模型服务</Text><Text size="sm" c="dimmed">先添加服务商，再管理这组连接下的模型。对话中随时切换，无需重复填写密钥。</Text>
               <div className={styles.protocolCards}>{protocols.map(item => <button key={item.value} type="button" onClick={() => addProvider(item.value)}><IconCpu size={18} /><span>{item.label}</span><IconPlus size={15} /></button>)}</div>
