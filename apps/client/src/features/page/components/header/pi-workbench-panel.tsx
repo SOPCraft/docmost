@@ -35,12 +35,14 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const [operation,setOperation]=useState('get_state'),[parameters,setParameters]=useState('{}'),[inspection,setInspection]=useState<unknown>(null);
   const [files,setFiles]=useState<{name:string;bytes:number}[]>([]),[unknown,setUnknown]=useState(false);
   const transcript=useRef<HTMLDivElement>(null),followBottom=useRef(true),fileInput=useRef<HTMLInputElement>(null),epoch=useRef(0);
-  const status=useQuery({queryKey:['pi-workbench-status',userId,pageId],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:unknown[];canManageModels?:boolean}>('status',{pageId},signal)});
-  const sessions=useQuery({queryKey:['pi-workbench-list',userId],enabled:opened&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?10000:false,queryFn:({signal})=>piRequest<{items:PiConversation[]}>('list',{},signal)});
-  const view=useQuery({queryKey:['pi-workbench-view',userId,sessionId],enabled:opened&&!!sessionId&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?1000:false,queryFn:({signal})=>piRequest<PiView>('view',{sessionId,after:0},signal)});
-  const search=useQuery({queryKey:['pi-workbench-search',userId,debounced],enabled:opened&&sourcePicker&&debounced.trim().length>=2,retry:false,gcTime:0,queryFn:async({signal})=>(await api.post<{items:Candidate[]}>('/search',{query:debounced,titleOnly:true},{signal})).data.items});
+  const openGate=useRef({opened,epoch:0});
+  if(openGate.current.opened!==opened)openGate.current={opened,epoch:openGate.current.epoch+(opened?1:0)};
+  const status=useQuery({queryKey:['pi-workbench-status',workspaceId,userId,pageId,openGate.current.epoch],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:unknown[];canManageModels?:boolean}>('status',{pageId},signal)});
+  const sessions=useQuery({queryKey:['pi-workbench-list',workspaceId,userId,openGate.current.epoch],enabled:opened&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?10000:false,queryFn:({signal})=>piRequest<{items:PiConversation[]}>('list',{},signal)});
+  const view=useQuery({queryKey:['pi-workbench-view',workspaceId,userId,sessionId,openGate.current.epoch],enabled:opened&&!!sessionId&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?1000:false,queryFn:({signal})=>piRequest<PiView>('view',{sessionId,after:0},signal)});
+  const search=useQuery({queryKey:['pi-workbench-search',workspaceId,userId,debounced,openGate.current.epoch],enabled:opened&&sourcePicker&&debounced.trim().length>=2,retry:false,gcTime:0,queryFn:async({signal})=>(await api.post<{items:Candidate[]}>('/search',{query:debounced,titleOnly:true},{signal})).data.items});
   const accessFailed=view.isError||status.isError||sessions.isError;
-  const data=!accessFailed?view.data:undefined,busy=!!data?.busy||!!data?.state.isStreaming||!!data?.state.isCompacting;
+  const data=opened&&!accessFailed?view.data:undefined,busy=!!data?.busy||!!data?.state.isStreaming||!!data?.state.isCompacting;
   const ready=status.data?.enabled&&!status.isError;
   const configured=!!data?.models?.length || (!sessionId&&!!status.data?.models?.length);
   useEffect(()=>{if(followBottom.current&&transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;},[data?.messages,data?.partial,data?.dialogs]);
@@ -52,7 +54,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   function choose(id:string){epoch.current++;setPosting(false);setSessionId(id);setText('');setImage(null);setError('');setUnknown(false);setInspection(null);setFiles([]);try{localStorage.setItem(storageKey,id);}catch{}}
   async function createConversation(pageIds=selected.map(item=>item.id)){
     const result=await piRequest<PiConversation>('create',{sessionId:crypto.randomUUID(),pageIds});
-    await client.invalidateQueries({queryKey:['pi-workbench-list',userId]});return result.id;
+    await client.invalidateQueries({queryKey:['pi-workbench-list',workspaceId,userId]});return result.id;
   }
   async function startNew(){
     if(posting||!ready)return;const generation=epoch.current;setPosting(true);setError('');
@@ -64,7 +66,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     if(!target)throw new Error('No conversation selected');
     const response=await piRequest<{success:boolean;data?:unknown;error?:string}>('command',{sessionId:target,command:{...fields,type,id:crypto.randomUUID()}});
     if(!response.success)throw new Error('Native command refused');
-    await client.invalidateQueries({queryKey:['pi-workbench-view',userId,target]});return response.data;
+    await client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId,target]});return response.data;
   }
   async function act(type:string,fields:Record<string,unknown>={}){
     const generation=epoch.current,target=sessionId;setPosting(true);setError('');
@@ -85,14 +87,14 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   async function addSource(item:Candidate){
     const generation=epoch.current,target=sessionId;setError('');
     try{
-      if(target){await piRequest('attach',{sessionId:target,pageIds:[item.id]});await client.invalidateQueries({queryKey:['pi-workbench-view',userId,target]});}
+      if(target){await piRequest('attach',{sessionId:target,pageIds:[item.id]});await client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId,target]});}
       else if(epoch.current===generation)setSelected(items=>items.some(value=>value.id===item.id)?items:[...items,item].slice(0,10));
       if(epoch.current===generation){setQuery('');setSourcePicker(false);}
     }catch(failure){if(epoch.current===generation)setError(piError(failure));}
   }
   async function respond(response:object){
     const generation=epoch.current,target=sessionId;
-    try{await piRequest('respond',{sessionId:target,response});await client.invalidateQueries({queryKey:['pi-workbench-view',userId,target]});}
+    try{await piRequest('respond',{sessionId:target,response});await client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId,target]});}
     catch(failure){if(epoch.current===generation)setError(piError(failure));}
   }
   async function loadImage(file?:File){
@@ -121,7 +123,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   }
   const sourceItems=sessionId?(data?.meta.sources||[]):selected.map(item=>({pageId:item.id,title:item.title,versionId:'',key:item.id,revision:undefined}));
   return <div className={classes.root} data-testid="pi-workbench-panel">
-    <PiModelSettings opened={modelSettings} onClose={()=>setModelSettings(false)} onSaved={()=>{void client.invalidateQueries({queryKey:['pi-workbench-status',userId]});void client.invalidateQueries({queryKey:['pi-workbench-view',userId]});}}/>
+    <PiModelSettings opened={modelSettings} onClose={()=>setModelSettings(false)} onSaved={()=>{void client.invalidateQueries({queryKey:['pi-workbench-status',workspaceId,userId]});void client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId]});}}/>
     <div className={classes.toolbar}>
       <Select aria-label="选择对话" placeholder="新对话" size="xs" style={{flex:1,minWidth:0}} value={sessionId||null} data={(sessions.isError?[]:sessions.data?.items||[]).map(item=>({value:item.id,label:item.title||'新对话'}))} onChange={value=>value&&choose(value)} searchable nothingFoundMessage="暂无对话" disabled={posting}/>
       <Tooltip label="新对话"><ActionIcon variant="subtle" color="gray" aria-label="新对话" disabled={posting||!ready} onClick={()=>void startNew()}><IconPlus size={17}/></ActionIcon></Tooltip>

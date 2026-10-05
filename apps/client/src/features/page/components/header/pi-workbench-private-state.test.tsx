@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { webcrypto } from 'node:crypto';
 import { PiWorkbenchPanel } from './pi-workbench-panel';
 
-const mocks = vi.hoisted(() => ({ post: vi.fn(), revoked: false }));
+const mocks = vi.hoisted(() => ({ post: vi.fn(), revoked: false, opened: true }));
 vi.mock('@/lib/api-client', () => ({ default: { post: mocks.post } }));
-vi.mock('jotai', () => ({ useAtomValue: () => ({ isAsideOpen: true, tab: 'pi' }) }));
+vi.mock('jotai', () => ({ useAtomValue: () => ({ isAsideOpen: mocks.opened, tab: 'pi' }) }));
 vi.mock('@/features/user/atoms/current-user-atom', () => ({ currentUserAtom: {} }));
 vi.mock('@/components/layouts/global/hooks/atoms/sidebar-atom', () => ({ asideStateAtom: {} }));
 vi.mock('@/features/page/queries/page-query', () => ({ usePageQuery: () => ({ data: null }) }));
@@ -43,7 +43,7 @@ async function revoke() {
   await screen.findByText(/某份来源版本已不可访问/);
 }
 beforeEach(() => {
-  mocks.revoked = false;
+  mocks.revoked = false; mocks.opened = true;
   vi.stubGlobal('localStorage', { getItem: () => sessionId, setItem() {}, removeItem() {} });
   vi.stubGlobal('crypto', webcrypto);
   Object.defineProperty(document, 'fonts', { configurable: true, value: new EventTarget() });
@@ -64,6 +64,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); for (const client of clients.splice(0)) client.clear(); vi.unstubAllGlobals(); });
 
 describe('conversation auxiliary state is private', () => {
+  it('reopening never flashes a private cached reply before fresh permission validation', async () => {
+    const rendered=await setup(); const client=clients.at(-1)!;
+    const tree=()=> <QueryClientProvider client={client}><MantineProvider env="test"><PiWorkbenchPanel userId={userId} workspaceId={workspaceId} pageId={pageId} title="当前文档"/></MantineProvider></QueryClientProvider>;
+    mocks.opened=false;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();
+    let resolve!:(value:unknown)=>void; const original=mocks.post.getMockImplementation()!;
+    mocks.post.mockImplementation((route,...args)=>route.endsWith('/view')?new Promise(done=>{resolve=done;}):original(route,...args));
+    mocks.opened=true;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();
+    await waitFor(()=>expect(resolve).toBeTypeOf('function'));
+    await act(async()=>{resolve({data:structuredClone(view)});});await screen.findByText('合成保密回复');
+  });
+
   it('removes operation output and source chips with the revoked transcript', async () => {
     await setup();
     await menuItem('查看真实用量统计');
