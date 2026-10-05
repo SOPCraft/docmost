@@ -12,7 +12,8 @@ function fixture(){
   const service=new PiWorkbenchService(users as any,history as any,{} as any);
   jest.spyOn(service as any,'configuration').mockReturnValue({origin:'http://127.0.0.1:3040',token:'a'.repeat(64)});
   jest.spyOn(service as any,'versionPresent').mockImplementation(async()=>present);
-  jest.spyOn(service as any,'call').mockImplementation(async(operation:string,claimedOwner:any,parameters:any={})=>{
+  jest.spyOn(service as any,'call').mockImplementation(async(...args:unknown[])=>{
+    const operation=String(args[0]),claimedOwner=args[1],parameters=args[2]||{};
     calls.push({operation,owner:claimedOwner,parameters});
     if(operation==='metadata')return structuredClone(meta);
     if(operation==='list'||operation==='active')return [structuredClone(meta)];
