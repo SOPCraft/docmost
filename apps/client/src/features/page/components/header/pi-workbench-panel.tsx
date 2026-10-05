@@ -80,7 +80,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     try{
       if(!target){target=await createConversation();if(epoch.current!==generation)return;setSessionId(target);try{localStorage.setItem(storageKey,target);}catch{}}
       await command('prompt',{message,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},target);
-      if(epoch.current===generation){setText('');setImage(null);followBottom.current=true;}
+      if(epoch.current===generation){setText(current=>current===message?'':current);setImage(current=>current===attachment?null:current);followBottom.current=true;}
     }catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
     finally{if(epoch.current===generation)setPosting(false);}
   }
@@ -153,8 +153,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       {data?.dialogs?.map(request=><PiWorkbenchQuestion key={String(request.id)} request={request} onRespond={respond}/>)}
       {data?.notices?.filter(item=>['notify','setStatus','setWidget'].includes(String(item.method))).map((item,index)=><div key={index} className={classes.notice}>{String(item.message||item.statusText||(Array.isArray(item.widgetLines)?item.widgetLines.join('\n'):''))}</div>)}
       {data?.notices?.filter(item=>item.method==='set_editor_text'&&typeof item.text==='string').map(item=><Button key={String(item.id)} size="compact-xs" variant="subtle" onClick={()=>{if(!text||window.confirm('用扩展返回的草稿替换当前输入内容？'))setText(String(item.text));}}>将扩展返回的草稿填入输入框</Button>)}
-      {!accessFailed&&!!inspection&&<details className={classes.tool}><summary>原生操作返回结果</summary><pre className={classes.payload}>{typeof inspection==='string'?inspection:JSON.stringify(inspection,null,2)}</pre></details>}
-      {!accessFailed&&files.map(file=><Button key={file.name} variant="subtle" size="compact-xs" onClick={()=>void download(file.name)}>{file.name}（生成文件）</Button>)}
+      {!!data&&!!inspection&&<details className={classes.tool}><summary>原生操作返回结果</summary><pre className={classes.payload}>{typeof inspection==='string'?inspection:JSON.stringify(inspection,null,2)}</pre></details>}
+      {!!data&&files.map(file=><Button key={file.name} variant="subtle" size="compact-xs" onClick={()=>void download(file.name)}>{file.name}（生成文件）</Button>)}
     </div>
     {sourceItems.length>0&&<div className={classes.sources}>{sourceItems.map((source,index)=><span className={classes.source} key={source.key||index}><span className={classes.sourceText} title={source.title}>{source.title}{source.revision?` · 第${source.revision}版`:''}</span>{!sessionId&&<ActionIcon size="xs" variant="subtle" aria-label={`移除${source.title}`} onClick={()=>setSelected(items=>items.filter(item=>item.id!==source.pageId))}><IconX size={10}/></ActionIcon>}</span>)}</div>}
     {sourcePicker&&!accessFailed&&<Stack gap={4} mb="xs"><TextInput label="添加文档" placeholder="搜索文档标题" size="xs" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><Button size="compact-xs" variant="subtle" onClick={()=>void addSource({id:pageId,title})}>附加当前文档</Button>{search.data?.slice(0,8).map(item=><Button key={item.id} size="compact-xs" variant="subtle" onClick={()=>void addSource(item)}>{item.title}</Button>)}</Stack>}

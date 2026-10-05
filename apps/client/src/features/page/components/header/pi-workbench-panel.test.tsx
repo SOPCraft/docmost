@@ -36,6 +36,16 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();for(const client of clients.splice(0))client.clear();vi.unstubAllGlobals();});
 describe('native Pi workbench panel',()=>{
+  it('a completed send does not erase a newer message being typed',async()=>{
+    let resolve!:(value:unknown)=>void;const original=mocks.post.getMockImplementation()!;
+    mocks.post.mockImplementation((route,...args)=>route.endsWith('/command')?new Promise(done=>{resolve=done;}):original(route,...args));
+    await ready();const input=screen.getByRole('textbox',{name:'发送给智能体'});
+    fireEvent.change(input,{target:{value:'已经提交的第一句'}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));
+    await waitFor(()=>expect(resolve).toBeTypeOf('function'));fireEvent.change(input,{target:{value:'正在输入的第二句'}});
+    await act(async()=>{resolve({data:{success:true,data:{accepted:true}}});});
+    await waitFor(()=>expect((input as HTMLTextAreaElement).value).toBe('正在输入的第二句'));
+  });
+
   it('renders inside the host panel without creating a drawer overlay',async()=>{await ready();expect(screen.getByTestId('pi-workbench-panel')).toBeTruthy();expect(document.querySelector('.mantine-Drawer-overlay')).toBeNull();expect(screen.queryByText('整理选中资料')).toBeNull();});
   it('sends multiple turns into the same persisted conversation',async()=>{await ready();const input=screen.getByRole('textbox',{name:'发送给智能体'});for(const text of ['第一轮问题','继续修改第二步']){fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await waitFor(()=>expect((input as HTMLTextAreaElement).value).toBe(''));}expect(commands().map(body=>body.sessionId)).toEqual([first,first]);expect(commands().map(body=>body.command.message)).toEqual(['第一轮问题','继续修改第二步']);});
   it('closing the panel does not send an abort or erase the selected conversation',async()=>{const rendered=setup();await screen.findByText('已保存的合成对话');rendered.unmount();expect(commands().some(body=>body.command.type==='abort')).toBe(false);expect(storage.get(selectedConversationKey(workspaceId,userId))).toBe(first);});

@@ -66,11 +66,12 @@ afterEach(() => { cleanup(); for (const client of clients.splice(0)) client.clea
 describe('conversation auxiliary state is private', () => {
   it('reopening never flashes a private cached reply before fresh permission validation', async () => {
     const rendered=await setup(); const client=clients.at(-1)!;
+    await menuItem('查看真实用量统计');await screen.findByText(/合成私有操作结果/);
     const tree=()=> <QueryClientProvider client={client}><MantineProvider env="test"><PiWorkbenchPanel userId={userId} workspaceId={workspaceId} pageId={pageId} title="当前文档"/></MantineProvider></QueryClientProvider>;
-    mocks.opened=false;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();
+    mocks.opened=false;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();expect(screen.queryByText(/合成私有操作结果/)).toBeNull();
     let resolve!:(value:unknown)=>void; const original=mocks.post.getMockImplementation()!;
     mocks.post.mockImplementation((route,...args)=>route.endsWith('/view')?new Promise(done=>{resolve=done;}):original(route,...args));
-    mocks.opened=true;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();
+    mocks.opened=true;rendered.rerender(tree());expect(screen.queryByText('合成保密回复')).toBeNull();expect(screen.queryByText(/合成私有操作结果/)).toBeNull();
     await waitFor(()=>expect(resolve).toBeTypeOf('function'));
     await act(async()=>{resolve({data:structuredClone(view)});});await screen.findByText('合成保密回复');
   });
