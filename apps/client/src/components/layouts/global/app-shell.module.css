@@ -39,3 +39,10 @@
 .aside[data-history-drawer="true"] {
   max-width: 100vw;
 }
+
+.asideResizeHandle { position:absolute; left:-4px; top:0; bottom:0; width:9px; cursor:col-resize; touch-action:none; z-index:10; outline:none; display:flex; align-items:center; justify-content:center; }
+.asideResizeHandle::before { content:""; position:absolute; top:0; bottom:0; left:4px; width:1px; background:var(--mantine-color-default-border); }
+.asideResizeHandle span { position:relative; width:3px; height:30px; border-radius:4px; background:var(--mantine-color-dimmed); opacity:.3; }
+.asideResizeHandle:hover::before,.asideResizeHandle:focus-visible::before,.asideResizeHandle[data-dragging="true"]::before { width:2px; background:var(--mantine-primary-color-filled); }
+.asideResizeHandle:hover span,.asideResizeHandle:focus-visible span,.asideResizeHandle[data-dragging="true"] span { opacity:1; background:var(--mantine-primary-color-filled); }
+@media(max-width:767px) { .asideResizeHandle { display:none; } .aside[data-pi-drawer="true"] { width:100%; max-width:100vw; } }

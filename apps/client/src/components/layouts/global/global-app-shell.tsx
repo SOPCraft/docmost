@@ -22,6 +22,7 @@ const AiChatSidebar = React.lazy(
 );
 import { AppHeader } from "@/components/layouts/global/app-header.tsx";
 import Aside from "@/components/layouts/global/aside.tsx";
+import { useResizableAside } from "./use-resizable-aside";
 import classes from "./app-shell.module.css";
 import { useTrialEndAction } from "@/ee/hooks/use-trial-end-action.tsx";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
@@ -91,6 +92,7 @@ export default function GlobalAppShell({
   const isAiRoute = location.pathname.startsWith("/ai");
   const isPageRoute = location.pathname.includes("/p/");
   const showGlobalSidebar = !isSpaceRoute && !isSettingsRoute && !isAiRoute;
+  const asideResize = useResizableAside(isSpaceRoute && desktopOpened ? Number(sidebarWidth) : 0, isPageRoute && isAsideOpen);
 
   return (
     <>
@@ -107,7 +109,7 @@ export default function GlobalAppShell({
         }}
         aside={
           isPageRoute && {
-            width: 350,
+            width: asideResize.width,
             breakpoint: "sm",
             collapsed: {
               mobile:
@@ -170,6 +172,8 @@ export default function GlobalAppShell({
             className={classes.aside}
             p={asideTab === "history" || asideTab === "pi" ? 0 : "md"}
             data-history-drawer={asideTab === "history" ? "true" : undefined}
+            data-pi-drawer={asideTab === "pi" ? "true" : undefined}
+            style={asideResize.dragging ? { transitionDuration: "0ms" } : undefined}
             withBorder={false}
             aria-label={
               asideTab === "pi"
@@ -187,6 +191,7 @@ export default function GlobalAppShell({
                         : undefined
             }
           >
+            <div className={classes.asideResizeHandle} {...asideResize.handleProps}><span /></div>
             <Aside />
           </AppShell.Aside>
         )}

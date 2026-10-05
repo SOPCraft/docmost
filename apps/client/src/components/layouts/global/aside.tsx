@@ -97,7 +97,7 @@ export default function Aside() {
 
   return (
     <Box
-      p="md"
+      p={tab === "pi" ? 18 : "md"}
       tabIndex={tab === "history" || tab === "pi" ? -1 : undefined}
       data-history-panel-body={tab === "history" ? "true" : undefined}
       onKeyDown={(e) => {
@@ -114,8 +114,8 @@ export default function Aside() {
       {component && (
         <>
           {tab !== "chat" && (
-            <Group justify="space-between" wrap="nowrap" mb="md">
-              <Title order={2} size="h6" fw={500}>
+            <Group justify="space-between" wrap="nowrap" mb={tab === "pi" ? 10 : "md"}>
+              <Title order={2} size="h6" fw={tab === "pi" ? 600 : 500}>
                 {t(title)}
               </Title>
               <Tooltip label={t("Close")} withArrow>

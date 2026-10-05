@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Loader, Menu, Select, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconDots, IconPaperclip, IconRefresh, IconX } from '@tabler/icons-react';
+import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconDots, IconPaperclip, IconRefresh, IconX, IconSettings2, IconRoute, IconChecklist, IconWand, IconArrowUpRight, IconFileText } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router-dom';
@@ -125,9 +125,10 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   return <div className={classes.root} data-testid="pi-workbench-panel">
     <PiModelSettings opened={modelSettings} onClose={()=>setModelSettings(false)} onSaved={()=>{void client.invalidateQueries({queryKey:['pi-workbench-status',workspaceId,userId]});void client.invalidateQueries({queryKey:['pi-workbench-view',workspaceId,userId]});}}/>
     <div className={classes.toolbar}>
-      <Select aria-label="选择对话" placeholder="新对话" size="xs" style={{flex:1,minWidth:0}} value={sessionId||null} data={(sessions.isError?[]:sessions.data?.items||[]).map(item=>({value:item.id,label:item.title||'新对话'}))} onChange={value=>value&&choose(value)} searchable nothingFoundMessage="暂无对话" disabled={posting}/>
+      <Select className={classes.sessionSelect} aria-label="选择对话" placeholder="新对话" size="xs" style={{flex:1,minWidth:0}} value={sessionId||null} data={(sessions.isError?[]:sessions.data?.items||[]).map(item=>({value:item.id,label:item.title||'新对话'}))} onChange={value=>value&&choose(value)} searchable nothingFoundMessage="暂无对话" disabled={posting}/>
       <Tooltip label="新对话"><ActionIcon variant="subtle" color="gray" aria-label="新对话" disabled={posting||!ready} onClick={()=>void startNew()}><IconPlus size={17}/></ActionIcon></Tooltip>
       <Tooltip label="刷新会话"><ActionIcon variant="subtle" color="gray" aria-label="刷新会话" onClick={()=>void refresh()}><IconRefresh size={16}/></ActionIcon></Tooltip>
+      {status.data?.canManageModels&&<Tooltip label="模型服务设置"><ActionIcon variant="subtle" color="gray" aria-label="模型服务设置" onClick={()=>setModelSettings(true)}><IconSettings2 size={16}/></ActionIcon></Tooltip>}
       <Menu position="bottom-end"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="更多会话操作"><IconDots size={17}/></ActionIcon></Menu.Target><Menu.Dropdown>
         <Menu.Item disabled={!sessionId||accessFailed} onClick={()=>void act('clone')}>克隆当前会话分支</Menu.Item>
         <Menu.Item disabled={!sessionId||busy||accessFailed} onClick={()=>void act('compact')}>整理长对话上下文</Menu.Item>
@@ -146,8 +147,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       {data?.sessions?.length>0&&<Select label="恢复原生历史会话" size="xs" data={data.sessions.map(item=>({value:item.path,label:item.name}))} value={data.state.sessionFile||null} onChange={value=>value&&void act('switch_session',{sessionPath:value})}/>}
     </Stack></div>}
     <div className={classes.transcript} ref={transcript} onScroll={()=>{const node=transcript.current;if(node)followBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<60;}} aria-live="polite" aria-label="智能体对话记录">
-      {!data?.messages?.length&&<div className={classes.empty}><div className={classes.emptyIcon}><IconSparkles size={20}/></div><Text fw={600} size="sm">把资料变成可复用的方法</Text><Text size="xs" c="dimmed">一起阅读、讨论和修改。助手会使用技能与工具，需要补充时会继续问你。</Text>
-        {['梳理这份文档的关键步骤','找出流程中的缺项与冲突','把已有经验整理成可复用技能'].map(value=><button type="button" className={classes.suggestion} key={value} onClick={()=>setText(value)}>{value}</button>)}
+      {!data?.messages?.length&&<div className={classes.empty}><div className={classes.emptyIcon}><IconSparkles size={22}/></div><div className={classes.emptyTitle}>从这份资料开始</div><div className={classes.emptyDescription}>一起梳理流程、补齐缺项，把经验变成可以反复使用的方法。</div>
+        <div className={classes.suggestions}>{[{text:'梳理这份文档的关键步骤',Icon:IconRoute},{text:'找出流程中的缺项与冲突',Icon:IconChecklist},{text:'把已有经验整理成可复用技能',Icon:IconWand}].map(({text:value,Icon})=><button type="button" className={classes.suggestion} key={value} onClick={()=>setText(value)}><Icon size={17}/><span>{value}</span><IconArrowUpRight size={14}/></button>)}</div>
       </div>}
       {accessFailed?<div className={classes.error}>{piError(view.error||status.error||sessions.error)}</div>:data&&<PiTranscript messages={data.messages} partial={data.partial}/>}
       {data?.dialogs?.map(request=><PiWorkbenchQuestion key={String(request.id)} request={request} onRespond={respond}/>)}
@@ -156,7 +157,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       {!!data&&!!inspection&&<details className={classes.tool}><summary>原生操作返回结果</summary><pre className={classes.payload}>{typeof inspection==='string'?inspection:JSON.stringify(inspection,null,2)}</pre></details>}
       {!!data&&files.map(file=><Button key={file.name} variant="subtle" size="compact-xs" onClick={()=>void download(file.name)}>{file.name}（生成文件）</Button>)}
     </div>
-    {sourceItems.length>0&&<div className={classes.sources}>{sourceItems.map((source,index)=><span className={classes.source} key={source.key||index}><span className={classes.sourceText} title={source.title}>{source.title}{source.revision?` · 第${source.revision}版`:''}</span>{!sessionId&&<ActionIcon size="xs" variant="subtle" aria-label={`移除${source.title}`} onClick={()=>setSelected(items=>items.filter(item=>item.id!==source.pageId))}><IconX size={10}/></ActionIcon>}</span>)}</div>}
+    <div className={classes.composerDock}>
+    {sourceItems.length>0&&<div className={classes.sources}>{sourceItems.map((source,index)=><span className={classes.source} key={source.key||index}><IconFileText size={12}/><span className={classes.sourceText} title={source.title}>{source.title}{source.revision?` · 第${source.revision}版`:''}</span>{!sessionId&&<ActionIcon size="xs" variant="subtle" aria-label={`移除${source.title}`} onClick={()=>setSelected(items=>items.filter(item=>item.id!==source.pageId))}><IconX size={10}/></ActionIcon>}</span>)}</div>}
     {sourcePicker&&!accessFailed&&<Stack gap={4} mb="xs"><TextInput label="添加文档" placeholder="搜索文档标题" size="xs" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><Button size="compact-xs" variant="subtle" onClick={()=>void addSource({id:pageId,title})}>附加当前文档</Button>{search.data?.slice(0,8).map(item=><Button key={item.id} size="compact-xs" variant="subtle" onClick={()=>void addSource(item)}>{item.title}</Button>)}</Stack>}
     {(busy||posting)&&<div className={classes.status}><Loader size={11}/>{posting?'正在提交操作':data?.state.isCompacting?'正在整理上下文':'智能体正在处理，可继续补充要求'}</div>}
     {error&&<div className={classes.error} role="alert">{error}</div>}
@@ -168,11 +170,12 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
         <Tooltip label="添加图片"><ActionIcon variant="subtle" color="gray" aria-label="添加图片" disabled={accessFailed} onClick={()=>fileInput.current?.click()}><IconPaperclip size={16}/></ActionIcon></Tooltip>
         <input ref={fileInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event=>void loadImage(event.target.files?.[0])}/>
         <Menu position="top-start"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="选择技能与命令"><IconSparkles size={15}/></ActionIcon></Menu.Target><Menu.Dropdown>{data?.commands?.length?data.commands.map(item=><Menu.Item key={item.name} onClick={()=>setText(`/${item.name} ${text}`)}>{item.description||`${item.name}（${item.source==='skill'?'技能':'命令'}）`}</Menu.Item>):<Menu.Item disabled>会话启动后加载原生技能</Menu.Item>}</Menu.Dropdown></Menu>
-        <div className={classes.model}><Select aria-label="模型" placeholder="未配置模型" size="xs" value={data?.state.model?`${data.state.model.provider}/${data.state.model.id}`:null} data={(data?.models||[]).map(model=>({value:`${model.provider}/${model.id}`,label:`${model.name||model.id}（模型）`}))} disabled={!sessionId||posting||busy||accessFailed} onChange={value=>{const model=data?.models.find(item=>`${item.provider}/${item.id}`===value);if(model)void act('set_model',{provider:model.provider,modelId:model.id});}}/></div>
+        <div className={classes.model}>{!configured&&status.data?.canManageModels?<button type="button" className={classes.setupModel} onClick={()=>setModelSettings(true)}><IconSettings2 size={13}/>配置模型</button>:<Select aria-label="模型" placeholder="未配置模型" size="xs" value={data?.state.model?`${data.state.model.provider}/${data.state.model.id}`:null} data={(data?.models||[]).map(model=>({value:`${model.provider}/${model.id}`,label:`${model.name||model.id}（模型）`}))} disabled={!sessionId||posting||busy||accessFailed} onChange={value=>{const model=data?.models.find(item=>`${item.provider}/${item.id}`===value);if(model)void act('set_model',{provider:model.provider,modelId:model.id});}}/>}</div>
         {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" aria-label="发送消息" disabled={!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/'))} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
       </div>
       {busy&&<Group px="xs" pb="xs" gap={6}><Select aria-label="运行中补充方式" size="xs" value={mode} onChange={value=>value&&setMode(value)} data={[{value:'steer',label:'纠正当前任务'},{value:'followUp',label:'排队追加任务'}]} style={{flex:1}}/><Button size="xs" disabled={!text.trim()||posting||unknown||accessFailed} onClick={()=>void send()}>追加</Button></Group>}
     </div>
     <div className={classes.hint}>{status.isError?'执行器连接失败。':!ready?status.isLoading?'正在检查执行器连接。':'执行器尚未配置。':!configured?'尚未配置实际模型；不会使用模拟回复冒充生成。':'所选资料会交给当前模型处理。原稿不变，收起面板不会删除对话。'}</div>
+    </div>
   </div>;
 }
