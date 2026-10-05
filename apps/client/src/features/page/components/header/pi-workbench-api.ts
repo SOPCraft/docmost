@@ -18,6 +18,11 @@ export async function piRequest<T>(route:string,body:unknown,signal?:AbortSignal
 export const piError = (error:unknown):string => {
   const code=(error as {response?:{data?:{message?:string}}})?.response?.data?.message;
   const messages:Record<string,string>={
+    PI_MODEL_ADMIN_REQUIRED:'只有工作空间管理员可以修改模型设置。',
+    PI_MODEL_SETTINGS_BUSY:'请先停止正在运行的智能体，再修改模型配置。',
+    PI_MODEL_SETTINGS_CHANGED:'模型配置已被其他操作更新，请重新打开设置后核对。',
+    PI_MODEL_CONFIG_INVALID:'模型配置有误，请检查接口协议、地址和上下文限制。',
+    PI_MODEL_KEY_REQUIRED:'新增模型需要填写访问密钥。',
     PI_WORKBENCH_NOT_CONFIGURED:'智能体执行器尚未配置。',
     PI_WORKBENCH_UNREACHABLE:'执行器连接中断；已保存的对话保留，不会自动重复发送。',
     PI_COMMAND_OUTCOME_UNKNOWN:'本次操作结果待核验。请刷新会话检查，不要重复发送。',

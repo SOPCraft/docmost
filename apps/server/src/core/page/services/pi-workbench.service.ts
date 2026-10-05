@@ -42,11 +42,15 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     catch { throw new ServiceUnavailableException('PI_WORKBENCH_UNREACHABLE'); }
     let body:any;try{body=await response.json();}catch{throw new ServiceUnavailableException('PI_WORKBENCH_RESPONSE_INVALID');}
     if(!response.ok){
-      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED']);
+      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED','PI_MODEL_ADMIN_REQUIRED','PI_MODEL_SETTINGS_BUSY','PI_MODEL_SETTINGS_CHANGED','PI_MODEL_CONFIG_INVALID','PI_MODEL_KEY_REQUIRED']);
       if(body.error==='PI_SESSION_NOT_FOUND')throw new NotFoundException('PI_SESSION_NOT_FOUND');
       throw new ServiceUnavailableException(safe.has(body.error)?body.error:'PI_WORKBENCH_OPERATION_FAILED');
     }
     return body.data;
+  }
+  private async versionPresent(source:Source,spaceId:string,user:User) {
+    const rows=(await sql`SELECT id FROM sop_page_versions WHERE id=${source.versionId}::uuid AND workspace_id=${user.workspaceId}::uuid AND page_id=${source.pageId}::uuid AND space_id=${spaceId}::uuid AND status='synced'`.execute(this.db)).rows;
+    return rows.length===1;
   }
   private async verifySources(meta:Conversation,user:User) {
     if(!meta || !isId(meta.id) || meta.owner?.actorId!==user.id || meta.owner?.workspaceId!==user.workspaceId || !Array.isArray(meta.sources) || meta.sources.length>100)throw new ForbiddenException('PI_CONVERSATION_UNAVAILABLE');
@@ -54,8 +58,7 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     for(const source of meta.sources){
       if(!isId(source.pageId)||!isId(source.versionId))throw new ForbiddenException('PI_CONVERSATION_UNAVAILABLE');
       let page=pages.get(source.pageId);if(!page){page=await this.history.displayAccess(source.pageId,user);pages.set(source.pageId,page);}
-      const present=(await sql`SELECT id FROM sop_page_versions WHERE id=${source.versionId}::uuid AND workspace_id=${user.workspaceId}::uuid AND page_id=${source.pageId}::uuid AND space_id=${page.spaceId}::uuid AND status='synced'`.execute(this.db)).rows.length;
-      if(present!==1)throw new ForbiddenException('PI_SOURCE_VERSION_UNAVAILABLE');
+      if(!await this.versionPresent(source,page.spaceId,user))throw new ForbiddenException('PI_SOURCE_VERSION_UNAVAILABLE');
     }
     await this.actor(user);
   }
@@ -70,7 +73,15 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
   async status(pageId:string,user:User) {
     const current=await this.actor(user);await this.history.displayAccess(pageId,current);
     if(!this.configuration())return {enabled:false,reason:'PI_WORKBENCH_NOT_CONFIGURED'};
-    return this.call('status',this.owner(current));
+    return { ...await this.call('status',this.owner(current)), canManageModels:['owner','admin'].includes(current.role) };
+  }
+  async modelSettings(user:User) {
+    const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    return this.call('model-settings',this.owner(current));
+  }
+  async saveModel(body:{model:object;revision:string;remove?:boolean},user:User) {
+    const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    return this.call('save-model',this.owner(current),{model:body.model,revision:body.revision,remove:body.remove===true});
   }
   async list(user:User) {
     const current=await this.actor(user);const list:Conversation[]=await this.call('list',this.owner(current)),items=[];

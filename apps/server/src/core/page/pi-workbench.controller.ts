@@ -1,5 +1,5 @@
 import { Body, Controller, Post, HttpCode, HttpStatus, Header, UseGuards } from '@nestjs/common';
-import { IsUUID, IsArray, ArrayMaxSize, IsObject, IsInt, Min, Max, IsString, Matches } from 'class-validator';
+import { IsUUID, IsArray, ArrayMaxSize, IsObject, IsInt, Min, Max, IsString, Matches, IsOptional, IsBoolean } from 'class-validator';
 import { AuthUser } from '../../common/decorators/auth-user.decorator';
 import { RequireSessionAuth } from '../../common/decorators/require-session-auth.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -12,6 +12,7 @@ export class WorkbenchSourcesDto extends WorkbenchSessionDto { @IsArray() @Array
 export class WorkbenchViewDto extends WorkbenchSessionDto { @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) after:number; }
 export class WorkbenchCommandDto extends WorkbenchSessionDto { @IsObject() command:object; }
 export class WorkbenchResponseDto extends WorkbenchSessionDto { @IsObject() response:object; }
+export class WorkbenchModelDto { @IsObject() model:object; @IsUUID() revision:string; @IsOptional() @IsBoolean() remove?:boolean; }
 export class WorkbenchArtifactDto extends WorkbenchSessionDto { @IsString() @Matches(/^[a-zA-Z0-9_.-]{1,200}$/) name:string; }
 
 @UseGuards(JwtAuthGuard)
@@ -21,6 +22,10 @@ export class PiWorkbenchController {
   constructor(private readonly workbench:PiWorkbenchService) {}
   @Post('status') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
   status(@Body() body:WorkbenchPageDto,@AuthUser() user:User){return this.workbench.status(body.pageId,user);}
+  @Post('model-settings') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  modelSettings(@AuthUser() user:User){return this.workbench.modelSettings(user);}
+  @Post('save-model') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  saveModel(@Body() body:WorkbenchModelDto,@AuthUser() user:User){return this.workbench.saveModel(body,user);}
   @Post('list') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
   list(@AuthUser() user:User){return this.workbench.list(user);}
   @Post('create') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')

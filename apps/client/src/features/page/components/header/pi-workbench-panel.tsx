@@ -13,6 +13,7 @@ import api from '@/lib/api-client';
 import { PiConversation, PiView, piError, piRequest, selectedConversationKey } from './pi-workbench-api';
 import { PiTranscript } from './pi-workbench-messages';
 import PiWorkbenchQuestion from './pi-workbench-question';
+import PiModelSettings from './pi-model-settings';
 import classes from './pi-workbench.module.css';
 
 type Candidate={id:string;title:string};
@@ -30,11 +31,11 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const [sessionId,setSessionId]=useState(()=>{try{return localStorage.getItem(storageKey)||'';}catch{return '';}});
   const [text,setText]=useState(''),[error,setError]=useState(''),[posting,setPosting]=useState(false),[sourcePicker,setSourcePicker]=useState(false);
   const [query,setQuery]=useState(''),[debounced]=useDebouncedValue(query,300),[selected,setSelected]=useState<Candidate[]>([{id:pageId,title}]);
-  const [mode,setMode]=useState('followUp'),[image,setImage]=useState<ImageInput|null>(null),[advanced,setAdvanced]=useState(false);
+  const [mode,setMode]=useState('followUp'),[image,setImage]=useState<ImageInput|null>(null),[advanced,setAdvanced]=useState(false),[modelSettings,setModelSettings]=useState(false);
   const [operation,setOperation]=useState('get_state'),[parameters,setParameters]=useState('{}'),[inspection,setInspection]=useState<unknown>(null);
   const [files,setFiles]=useState<{name:string;bytes:number}[]>([]),[unknown,setUnknown]=useState(false);
   const transcript=useRef<HTMLDivElement>(null),followBottom=useRef(true),fileInput=useRef<HTMLInputElement>(null),epoch=useRef(0);
-  const status=useQuery({queryKey:['pi-workbench-status',userId,pageId],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:unknown[]}>('status',{pageId},signal)});
+  const status=useQuery({queryKey:['pi-workbench-status',userId,pageId],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:unknown[];canManageModels?:boolean}>('status',{pageId},signal)});
   const sessions=useQuery({queryKey:['pi-workbench-list',userId],enabled:opened&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?10000:false,queryFn:({signal})=>piRequest<{items:PiConversation[]}>('list',{},signal)});
   const view=useQuery({queryKey:['pi-workbench-view',userId,sessionId],enabled:opened&&!!sessionId&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?1000:false,queryFn:({signal})=>piRequest<PiView>('view',{sessionId,after:0},signal)});
   const search=useQuery({queryKey:['pi-workbench-search',userId,debounced],enabled:opened&&sourcePicker&&debounced.trim().length>=2,retry:false,gcTime:0,queryFn:async({signal})=>(await api.post<{items:Candidate[]}>('/search',{query:debounced,titleOnly:true},{signal})).data.items});
@@ -43,10 +44,16 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const configured=!!data?.models?.length || (!sessionId&&!!status.data?.models?.length);
   useEffect(()=>{if(followBottom.current&&transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;},[data?.messages,data?.partial,data?.dialogs]);
   useEffect(()=>()=>{epoch.current++;},[]);
-  function choose(id:string){epoch.current++;setSessionId(id);setError('');setUnknown(false);setInspection(null);setFiles([]);try{localStorage.setItem(storageKey,id);}catch{}}
-  async function createConversation(){
-    const id=crypto.randomUUID();const result=await piRequest<PiConversation>('create',{sessionId:id,pageIds:selected.map(item=>item.id)});
-    choose(result.id);await client.invalidateQueries({queryKey:['pi-workbench-list',userId]});return result.id;
+  function choose(id:string){epoch.current++;setPosting(false);setSessionId(id);setText('');setImage(null);setError('');setUnknown(false);setInspection(null);setFiles([]);try{localStorage.setItem(storageKey,id);}catch{}}
+  async function createConversation(pageIds=selected.map(item=>item.id)){
+    const result=await piRequest<PiConversation>('create',{sessionId:crypto.randomUUID(),pageIds});
+    await client.invalidateQueries({queryKey:['pi-workbench-list',userId]});return result.id;
+  }
+  async function startNew(){
+    if(posting||!ready)return;const generation=epoch.current;setPosting(true);setError('');
+    try{const id=await createConversation(sessionId?[pageId]:selected.map(item=>item.id));if(epoch.current===generation){choose(id);setSelected([{id:pageId,title}]);}}
+    catch(failure){if(epoch.current===generation)setError(piError(failure));}
+    finally{if(epoch.current===generation)setPosting(false);}
   }
   async function command(type:string,fields:Record<string,unknown>={},target=sessionId){
     if(!target)throw new Error('No conversation selected');
@@ -55,13 +62,20 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     await client.invalidateQueries({queryKey:['pi-workbench-view',userId,target]});return response.data;
   }
   async function act(type:string,fields:Record<string,unknown>={}){
-    setPosting(true);setError('');try{const result=await command(type,fields);setInspection(result??'操作已由原生执行器确认');}catch(failure){setError(piError(failure));setUnknown(true);}finally{setPosting(false);}
+    const generation=epoch.current,target=sessionId;setPosting(true);setError('');
+    try{const result=await command(type,fields,target);if(epoch.current===generation)setInspection(result??'操作已由原生执行器确认');}
+    catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
+    finally{if(epoch.current===generation)setPosting(false);}
   }
   async function send(){
-    if(!text.trim()||posting||unknown||!ready||!configured)return;
-    setPosting(true);setError('');const message=text,attachment=image;
-    try{const id=sessionId||await createConversation();await command('prompt',{message,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},id);setText('');setImage(null);}
-    catch(failure){setError(piError(failure));setUnknown(true);}finally{setPosting(false);}
+    if(!text.trim()||posting||unknown||!ready||(!configured&&!text.trim().startsWith('/')))return;
+    const generation=epoch.current,message=text,attachment=image;let target=sessionId;setPosting(true);setError('');
+    try{
+      if(!target){target=await createConversation();if(epoch.current!==generation)return;setSessionId(target);try{localStorage.setItem(storageKey,target);}catch{}}
+      await command('prompt',{message,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},target);
+      if(epoch.current===generation){setText('');setImage(null);followBottom.current=true;}
+    }catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
+    finally{if(epoch.current===generation)setPosting(false);}
   }
   async function addSource(item:Candidate){
     setError('');try{
@@ -80,9 +94,10 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   }
   const sourceItems=data?.meta.sources||selected.map(item=>({pageId:item.id,title:item.title,versionId:'',key:item.id,revision:undefined}));
   return <div className={classes.root} data-testid="pi-workbench-panel">
+    <PiModelSettings opened={modelSettings} onClose={()=>setModelSettings(false)} onSaved={()=>{void client.invalidateQueries({queryKey:['pi-workbench-status',userId]});void client.invalidateQueries({queryKey:['pi-workbench-view',userId]});}}/>
     <div className={classes.toolbar}>
       <Select aria-label="选择对话" placeholder="新对话" size="xs" style={{flex:1,minWidth:0}} value={sessionId||null} data={(sessions.isError?[]:sessions.data?.items||[]).map(item=>({value:item.id,label:item.title||'新对话'}))} onChange={value=>value&&choose(value)} searchable nothingFoundMessage="暂无对话" disabled={posting}/>
-      <Tooltip label="新对话"><ActionIcon variant="subtle" color="gray" aria-label="新对话" onClick={()=>{choose('');setSelected([{id:pageId,title}]);setText('');}}><IconPlus size={17}/></ActionIcon></Tooltip>
+      <Tooltip label="新对话"><ActionIcon variant="subtle" color="gray" aria-label="新对话" disabled={posting||!ready} onClick={()=>void startNew()}><IconPlus size={17}/></ActionIcon></Tooltip>
       <Tooltip label="刷新会话"><ActionIcon variant="subtle" color="gray" aria-label="刷新会话" onClick={()=>{void view.refetch();void status.refetch();setUnknown(false);}}><IconRefresh size={16}/></ActionIcon></Tooltip>
       <Menu position="bottom-end"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="更多会话操作"><IconDots size={17}/></ActionIcon></Menu.Target><Menu.Dropdown>
         <Menu.Item disabled={!sessionId} onClick={()=>void act('clone')}>克隆当前会话分支</Menu.Item>
@@ -91,6 +106,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
         <Menu.Item disabled={!sessionId} onClick={()=>void act('get_session_stats')}>查看真实用量统计</Menu.Item>
         <Menu.Item disabled={!sessionId} onClick={()=>void act('export_html')}>导出对话网页</Menu.Item>
         <Menu.Item disabled={!sessionId} onClick={()=>void piRequest<{name:string;bytes:number}[]>('artifacts',{sessionId}).then(setFiles).catch(failure=>setError(piError(failure)))}>查看生成文件</Menu.Item>
+        {status.data?.canManageModels&&<Menu.Item onClick={()=>setModelSettings(true)}>模型设置</Menu.Item>}
         <Menu.Item onClick={()=>setAdvanced(value=>!value)}>完整原生控制</Menu.Item>
       </Menu.Dropdown></Menu>
     </div>
@@ -123,10 +139,10 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
         <input ref={fileInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event=>void loadImage(event.target.files?.[0])}/>
         <Menu position="top-start"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="选择技能与命令"><IconSparkles size={15}/></ActionIcon></Menu.Target><Menu.Dropdown>{data?.commands?.length?data.commands.map(item=><Menu.Item key={item.name} onClick={()=>setText(`/${item.name} ${text}`)}>{item.description||`${item.name}（${item.source==='skill'?'技能':'命令'}）`}</Menu.Item>):<Menu.Item disabled>会话启动后加载原生技能</Menu.Item>}</Menu.Dropdown></Menu>
         <div className={classes.model}><Select aria-label="模型" placeholder="未配置模型" size="xs" value={data?.state.model?`${data.state.model.provider}/${data.state.model.id}`:null} data={(data?.models||[]).map(model=>({value:`${model.provider}/${model.id}`,label:`${model.name||model.id}（模型）`}))} disabled={!sessionId||posting||busy} onChange={value=>{const model=data?.models.find(item=>`${item.provider}/${item.id}`===value);if(model)void act('set_model',{provider:model.provider,modelId:model.id});}}/></div>
-        {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" aria-label="发送消息" disabled={!text.trim()||posting||unknown||!ready||!configured} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
+        {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" aria-label="发送消息" disabled={!text.trim()||posting||unknown||!ready||(!configured&&!text.trim().startsWith('/'))} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
       </div>
       {busy&&<Group px="xs" pb="xs" gap={6}><Select aria-label="运行中补充方式" size="xs" value={mode} onChange={value=>value&&setMode(value)} data={[{value:'steer',label:'纠正当前任务'},{value:'followUp',label:'排队追加任务'}]} style={{flex:1}}/><Button size="xs" disabled={!text.trim()||posting||unknown} onClick={()=>void send()}>追加</Button></Group>}
     </div>
-    <div className={classes.hint}>{status.isError?'执行器连接失败。':!ready?'正在检查执行器连接。':!configured?'尚未配置实际模型；不会使用模拟回复冒充生成。':'原稿保持不变。收起面板不会删除对话。'}</div>
+    <div className={classes.hint}>{status.isError?'执行器连接失败。':!ready?status.isLoading?'正在检查执行器连接。':'执行器尚未配置。' :!configured?'尚未配置实际模型；不会使用模拟回复冒充生成。':'原稿保持不变。收起面板不会删除对话。'}</div>
   </div>;
 }
