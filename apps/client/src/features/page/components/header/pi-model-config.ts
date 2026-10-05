@@ -17,7 +17,7 @@ export function groupProviders(models: SavedModel[]): ProviderGroup[] {
 }
 export function providerName(id: string) {
   const names: Record<string, string> = { qwen: '千问', dashscope: '千问', deepseek: '深度求索', zhipu: '智谱', glm: '智谱', doubao: '豆包', moonshot: '月之暗面', kimi: '月之暗面', openai: 'OpenAI（模型服务）', anthropic: 'Anthropic（模型服务）', custom: '自定义服务' };
-  return Object.hasOwn(names, id.toLowerCase()) ? names[id.toLowerCase()] : id;
+  return Object.prototype.hasOwnProperty.call(names, id.toLowerCase()) ? names[id.toLowerCase()] : id;
 }
 export function newModel(provider = 'custom'): ModelForm {
   return { provider, modelId: '', label: '', api: 'openai-completions', baseUrl: '', apiKey: '', reasoning: false, contextWindow: 65536, maxTokens: 8192, input: ['text'] };
