@@ -2,7 +2,7 @@ import api from '@/lib/api-client';
 import type { PiMessage, PiRecord } from './pi-workbench-state';
 export type PiSourceRef = { pageId:string; versionId:string; title:string; revision?:number; key:string };
 export type PiConversation = { id:string; title:string; createdAt:string; updatedAt:string; sources:PiSourceRef[] };
-export type PiModel = { provider:string; id:string; name?:string; reasoning?:boolean };
+export type PiModel = { provider:string; id:string; name?:string; label?:string; reasoning?:boolean };
 export type PiCommand = { name:string; description?:string; source:'skill'|'extension'|'prompt' };
 export type PiView = {
   meta:PiConversation;
