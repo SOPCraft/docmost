@@ -40,7 +40,7 @@ describe('native Pi workbench panel',()=>{
     await ready();expect(screen.queryByLabelText('原生能力')).toBeNull();
     expect(screen.queryByRole('button',{name:'更多会话操作'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'设置与工具'}));fireEvent.click(await screen.findByRole('menuitem',{name:'完整原生控制'}));
-    expect(screen.getByRole('dialog',{name:'高级工具'})).toBeTruthy();expect(screen.getByLabelText('原生能力')).toBeTruthy();
+    expect(screen.getByRole('dialog',{name:'高级工具'})).toBeTruthy();expect(screen.getByRole('combobox',{name:'原生能力'})).toBeTruthy();
     expect(screen.getByRole('textbox',{name:'发送给智能体',hidden:true})).toBeTruthy();
     fireEvent.click(screen.getByRole('button',{name:'关闭高级工具'}));await waitFor(()=>expect(screen.queryByRole('dialog',{name:'高级工具'})).toBeNull());
     expect(commands()).toHaveLength(0);

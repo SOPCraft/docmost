@@ -8,8 +8,12 @@ function open(overrides: Partial<Parameters<typeof PiWorkbenchActions>[0]> = {})
   render(<MantineProvider env="test"><PiWorkbenchActions {...actions} canManageModels sessionAvailable busy={false} posting={false} {...overrides} /></MantineProvider>);
   fireEvent.click(screen.getByRole('button', { name: '设置与工具' }));
 }
-beforeEach(() => { Object.values(actions).forEach(action => action.mockReset()); });
-afterEach(cleanup);
+beforeEach(() => {
+  Object.values(actions).forEach(action => action.mockReset());
+  Object.defineProperty(window,'matchMedia',{configurable:true,value:vi.fn().mockImplementation(()=>({matches:false,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){}}))});
+  vi.stubGlobal('ResizeObserver',class{observe(){}unobserve(){}disconnect(){}});
+});
+afterEach(() => { cleanup();vi.unstubAllGlobals(); });
 
 describe('one grouped workbench settings entry', () => {
   it('replaces the two neighboring ambiguous icons with one labeled entry', () => {
