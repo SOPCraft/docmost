@@ -15,7 +15,7 @@ export default function PiModelSettings({opened,onClose,onSaved}:{opened:boolean
  const epoch=useRef(0),next=useRef<(()=>void)|null>(null),abort=useRef<AbortController|null>(null);
  async function load(){
   const generation=++epoch.current;abort.current?.abort();const controller=new AbortController();abort.current=controller;setLoading(true);setError('');
-  try{const result=await piRequest<ModelServicesView>('provider-settings',{},controller.signal);if(epoch.current!==generation)return;if(result?.schema!=='sop.model-services/1'||!Array.isArray(result.catalog?.categories))throw new Error('Invalid services response');setView(result);}
+  try{const result=await piRequest<ModelServicesView>('provider-settings',{},controller.signal);if(epoch.current!==generation)return;if(result?.schema!=='sop.model-services/1'||!Array.isArray(result.catalog?.categories))throw new Error('Invalid services response');setView(result);const preferred=result.connections.find(item=>item.category==='chat'&&item.status.state==='passed')||result.connections.find(item=>item.category==='chat'&&item.configured);if(preferred)setSelected({chat:preferred.provider});}
   catch(failure){if(epoch.current===generation){const status=(failure as {response?:{status?:number}})?.response?.status;if(status===404)setLegacy(true);else setError(providerError(failure));}}
   finally{if(epoch.current===generation)setLoading(false);}
  }
@@ -30,9 +30,10 @@ export default function PiModelSettings({opened,onClose,onSaved}:{opened:boolean
  if(category==='chat'&&custom&&!entries.some(entry=>entry.id===custom.id))entries.push(custom);
  const entry=entries.find(item=>item.id===selected[category])||entries[0];
  const filtered=entries.filter(item=>(item.name+' '+item.id).toLowerCase().includes(search.toLowerCase()));
+ const configuredCount=view?.connections.filter(item=>item.configured).length||0;
  if(legacy)return <LegacyModelSettings opened={opened} onClose={onClose} onSaved={onSaved}/>;
  return <>
-  <Modal opened={opened} onClose={()=>navigate(onClose)} title={<div><Text fw={600} size="md">模型服务</Text><Text size="xs" c="dimmed" mt={3}>选择供应商，管理访问凭据、接口地址与模型目录</Text></div>} size="min(1120px, calc(100vw - 24px))" centered padding={0} radius={14} classNames={{content:styles.modal,header:styles.header,body:styles.body}} closeOnClickOutside={false} closeOnEscape={!busy&&!discard} closeButtonProps={{disabled:busy,'aria-label':'关闭模型设置'}}>
+  <Modal opened={opened} onClose={()=>navigate(onClose)} title={<div><Text fw={650} size="md">模型服务</Text><Text size="xs" c="dimmed" mt={3}>{view?'已接入 '+configuredCount+' 个服务 · 选择供应商管理连接和模型':'选择供应商，管理访问凭据、接口地址与模型目录'}</Text></div>} size="min(1120px, calc(100vw - 24px))" centered padding={0} radius={14} classNames={{content:styles.modal,header:styles.header,body:styles.body}} closeOnClickOutside={false} closeOnEscape={!busy&&!discard} closeButtonProps={{disabled:busy,'aria-label':'关闭模型设置'}}>
    {opened&&<div className={styles.root} data-testid="pi-model-services">
     {view&&<div className={styles.tabs} role="tablist" aria-label="模型服务分类">{view.catalog.categories.map(tab=>{const Icon=icons[tab.id];return <button type="button" key={tab.id} role="tab" aria-selected={tab.id===category} aria-controls="model-service-category-panel" className={styles.tab} disabled={busy||loading} onClick={()=>navigate(()=>{setCategory(tab.id);setSearch('');})}><Icon size={15}/>{tab.label}</button>;})}</div>}
     {loading&&!view&&<Group justify="center" p="xl"><Loader size="sm"/><Text size="sm">正在读取供应商目录</Text></Group>}
