@@ -38,16 +38,18 @@ const HistorySidebar = lazy(
 
 const PiWorkbenchSidebar = lazy(() => import("@/features/page/components/header/pi-workbench-panel"));
 
+import { shouldClosePiAside } from "@/features/page/components/header/pi-aside-keyboard";
+
 export default function Aside() {
   const [{ tab, isAsideOpen }, setAsideState] = useAtom(asideStateAtom);
   const { t } = useTranslation();
   const pageEditor = useAtomValue(pageEditorAtom);
   const closeAside = () => {
     setAsideState((s) => ({ ...s, isAsideOpen: false }));
-    if (tab === "history")
+    if (tab === "history" || tab === "pi")
       requestAnimationFrame(() =>
         document
-          .querySelector<HTMLElement>('[data-testid="history-trigger"]')
+          .querySelector<HTMLElement>(tab === 'pi' ? '[data-testid="pi-workbench-trigger"]' : '[data-testid="history-trigger"]')
           ?.focus(),
       );
   };
@@ -99,7 +101,7 @@ export default function Aside() {
       tabIndex={tab === "history" || tab === "pi" ? -1 : undefined}
       data-history-panel-body={tab === "history" ? "true" : undefined}
       onKeyDown={(e) => {
-        if ((tab === "history" || tab === "pi") && e.key === "Escape" && !e.defaultPrevented)
+        if (tab === "pi" ? shouldClosePiAside(e) : tab === "history" && e.key === "Escape" && !e.defaultPrevented)
           closeAside();
       }}
       style={{
