@@ -36,6 +36,16 @@ beforeEach(()=>{
 });
 afterEach(()=>{cleanup();for(const client of clients.splice(0))client.clear();vi.unstubAllGlobals();});
 describe('native Pi workbench panel',()=>{
+  it('shows advanced controls only in an explicitly opened dialog, not above the conversation',async()=>{
+    await ready();expect(screen.queryByLabelText('原生能力')).toBeNull();
+    expect(screen.queryByRole('button',{name:'更多会话操作'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'设置与工具'}));fireEvent.click(await screen.findByRole('menuitem',{name:'完整原生控制'}));
+    expect(screen.getByRole('dialog',{name:'高级工具'})).toBeTruthy();expect(screen.getByLabelText('原生能力')).toBeTruthy();
+    expect(screen.getByRole('textbox',{name:'发送给智能体',hidden:true})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'关闭高级工具'}));await waitFor(()=>expect(screen.queryByRole('dialog',{name:'高级工具'})).toBeNull());
+    expect(commands()).toHaveLength(0);
+  });
+
   it('a completed send does not erase a newer message being typed',async()=>{
     let resolve!:(value:unknown)=>void;const original=mocks.post.getMockImplementation()!;
     mocks.post.mockImplementation((route,...args)=>route.endsWith('/command')?new Promise(done=>{resolve=done;}):original(route,...args));

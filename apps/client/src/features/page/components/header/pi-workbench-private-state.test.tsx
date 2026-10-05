@@ -34,7 +34,7 @@ async function setup() {
   return rendered;
 }
 async function menuItem(label: string) {
-  fireEvent.click(screen.getByRole('button', { name: '更多会话操作' }));
+  fireEvent.click(screen.getByRole('button', { name: '设置与工具' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: label }));
 }
 async function revoke() {
