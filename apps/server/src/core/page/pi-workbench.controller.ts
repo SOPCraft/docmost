@@ -13,6 +13,8 @@ export class WorkbenchViewDto extends WorkbenchSessionDto { @IsInt() @Min(0) @Ma
 export class WorkbenchCommandDto extends WorkbenchSessionDto { @IsObject() command:object; }
 export class WorkbenchResponseDto extends WorkbenchSessionDto { @IsObject() response:object; }
 export class WorkbenchModelDto { @IsObject() model:object; @IsUUID() revision:string; @IsOptional() @IsBoolean() remove?:boolean; }
+export class ProviderChangeDto { @IsObject() change:object; @IsUUID() revision:string; }
+export class ProviderProbeDto { @IsObject() request:object; }
 export class WorkbenchArtifactDto extends WorkbenchSessionDto { @IsString() @Matches(/^[a-zA-Z0-9_.-]{1,200}$/) name:string; }
 
 @UseGuards(JwtAuthGuard)
@@ -26,6 +28,14 @@ export class PiWorkbenchController {
   modelSettings(@AuthUser() user:User){return this.workbench.modelSettings(user);}
   @Post('save-model') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
   saveModel(@Body() body:WorkbenchModelDto,@AuthUser() user:User){return this.workbench.saveModel(body,user);}
+  @Post('provider-settings') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  providerSettings(@AuthUser() user:User){return this.workbench.providerSettings(user);}
+  @Post('provider-change') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  changeProvider(@Body() body:ProviderChangeDto,@AuthUser() user:User){return this.workbench.changeProvider(body,user);}
+  @Post('provider-test') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  testProvider(@Body() body:ProviderProbeDto,@AuthUser() user:User){return this.workbench.testProvider(body,user);}
+  @Post('provider-discover') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
+  discoverProvider(@Body() body:ProviderProbeDto,@AuthUser() user:User){return this.workbench.discoverProvider(body,user);}
   @Post('list') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')
   list(@AuthUser() user:User){return this.workbench.list(user);}
   @Post('create') @HttpCode(HttpStatus.OK) @Header('Cache-Control','private, no-store')

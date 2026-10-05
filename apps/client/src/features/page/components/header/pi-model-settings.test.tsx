@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
-import PiModelSettings from './pi-model-settings';
+import PiModelSettings from './pi-model-settings-legacy';
 import { editModel, groupProviders, modelErrors, newModel } from './pi-model-config';
 import type { ModelSettings } from './pi-model-config';
 const mocks=vi.hoisted(()=>({request:vi.fn(),onSaved:vi.fn(),onClose:vi.fn()}));

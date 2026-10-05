@@ -42,7 +42,7 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     catch { throw new ServiceUnavailableException('PI_WORKBENCH_UNREACHABLE'); }
     let body:any;try{body=await response.json();}catch{throw new ServiceUnavailableException('PI_WORKBENCH_RESPONSE_INVALID');}
     if(!response.ok){
-      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED','PI_MODEL_ADMIN_REQUIRED','PI_MODEL_SETTINGS_BUSY','PI_MODEL_SETTINGS_CHANGED','PI_MODEL_CONFIG_INVALID','PI_MODEL_KEY_REQUIRED']);
+      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED','PI_MODEL_ADMIN_REQUIRED','PI_MODEL_SETTINGS_BUSY','PI_MODEL_SETTINGS_CHANGED','PI_MODEL_CONFIG_INVALID','PI_MODEL_KEY_REQUIRED','PI_PROVIDER_NOT_CONFIGURED','PI_PROVIDER_UNSUPPORTED','PI_PROVIDER_CHANGE_INVALID','PI_PROVIDER_PRESET_INVALID','PI_PROVIDER_ID_INVALID','PI_PROVIDER_REENTER_KEY','PI_PROVIDER_CLEAR_KEY_REQUIRED','PI_PROVIDER_ADDRESS_INVALID','PI_PROVIDER_ADDRESS_DENIED','PI_PROVIDER_DNS_FAILED','PI_PROVIDER_NETWORK_FAILED','PI_PROVIDER_AUTH_FAILED','PI_PROVIDER_ENDPOINT_NOT_FOUND','PI_PROVIDER_RATE_LIMITED','PI_PROVIDER_REDIRECT_DENIED','PI_PROVIDER_TIMEOUT','PI_PROVIDER_RESPONSE_INVALID','PI_PROVIDER_RESPONSE_TOO_LARGE','PI_PROVIDER_UPSTREAM_FAILED','PI_PROVIDER_DISCOVERY_UNSUPPORTED','PI_PROVIDER_DIAGNOSTIC_BUSY','PI_DISCOVERY_INCOMPLETE','PI_DISCOVERY_TOO_LARGE']);
       if(body.error==='PI_SESSION_NOT_FOUND')throw new NotFoundException('PI_SESSION_NOT_FOUND');
       throw new ServiceUnavailableException(safe.has(body.error)?body.error:'PI_WORKBENCH_OPERATION_FAILED');
     }
@@ -83,6 +83,16 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
     return this.call('save-model',this.owner(current),{model:body.model,revision:body.revision,remove:body.remove===true});
   }
+  private async providerAdmin(operation:string,parameters:Record<string,unknown>,user:User){
+    const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    const result=await this.call(operation,this.owner(current),parameters);
+    const after=await this.actor(user);if(!['owner','admin'].includes(after.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    return result;
+  }
+  providerSettings(user:User){return this.providerAdmin('provider-settings',{},user);}
+  changeProvider(body:{change:object;revision:string},user:User){return this.providerAdmin('provider-change',{change:body.change,revision:body.revision},user);}
+  testProvider(body:{request:object},user:User){return this.providerAdmin('provider-test',{request:body.request},user);}
+  discoverProvider(body:{request:object},user:User){return this.providerAdmin('provider-discover',{request:body.request},user);}
   async list(user:User) {
     const current=await this.actor(user);const list:Conversation[]=await this.call('list',this.owner(current)),items=[];
     if(!Array.isArray(list))throw new ServiceUnavailableException('PI_WORKBENCH_RESPONSE_INVALID');
