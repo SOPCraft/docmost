@@ -29,7 +29,7 @@ export const handbookFilePattern=filePattern;
 export class HandbookService implements OnApplicationBootstrap,OnApplicationShutdown {
   private readonly logger=new Logger(HandbookService.name);
   private timer:ReturnType<typeof setTimeout>;private running:Promise<void>|null=null;private stopped=false;
-  private readonly layoutProposals=new Map<string,{expiresAt:number;workspaceId:string;actorId:string;pageId:string;spaceId:string;versionId:string;sourceJson:string;assetStamp:string;rendererHash:string;targetToken:string;binding:any;bindingHash:string;summary:any}>();
+  private readonly layoutProposals=new Map<string,{expiresAt:number;workspaceId:string;actorId:string;pageId:string;spaceId:string;versionId:string;sourceHash:string;assetStamp:string;rendererHash:string;targetToken:string;binding:any;bindingHash:string;summary:any}>();
   private readonly runtime=path.resolve(process.cwd(),'.sop-display-runtime');
   constructor(@InjectKysely() private readonly db:KyselyDB,private readonly store:HandbookJobStore,
     private readonly history:VersionHistoryService,private readonly users:UserRepo,private readonly pages:PageRepo,
@@ -82,11 +82,13 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
     const proposalHash=hash(canonicalJson({workspaceId:user.workspaceId,actorId:user.id,pageId,sourceVersion:version.id,snapshot:source.snapshotSha256,bindingHash,rendererHash:c.rendererHash,assetStamp,targetToken:token,planner:decision.planner,model:decision.model}));
     if(canonicalJson(await this.history.displaySource(pageId,version.id,access.user))!==canonicalJson(source))throw new ConflictException('LAYOUT_SOURCE_CHANGED');
     await this.access(pageId,access.user,true);
-    return {access,plan,token,bindingHash,version,proposalHash,sourceJson:canonicalJson(source),assetStamp,rendererHash:c.rendererHash,decision};
+    return {access,plan,token,bindingHash,version,proposalHash,sourceHash:hash(canonicalJson(source)),assetStamp,rendererHash:c.rendererHash,decision};
   }
   async previewLayout(pageId:string,selection:{id:string;version:string;density:string},user:User){
-    const p=await this.prepareLayout(pageId,selection,user),now=Date.now();for(const [key,value] of this.layoutProposals)if(value.expiresAt<=now)this.layoutProposals.delete(key);
-    this.layoutProposals.set(p.proposalHash,{expiresAt:now+10*60*1000,workspaceId:user.workspaceId,actorId:user.id,pageId,spaceId:p.access.page.spaceId,versionId:p.version.id,sourceJson:p.sourceJson,assetStamp:p.assetStamp,rendererHash:p.rendererHash,targetToken:p.token,binding:p.plan.binding,bindingHash:p.bindingHash,summary:p.plan.summary});
+    const p=await this.prepareLayout(pageId,selection,user),now=Date.now();
+    for(const [key,value] of this.layoutProposals)if(value.expiresAt<=now||(value.workspaceId===user.workspaceId&&value.actorId===user.id&&value.pageId===pageId))this.layoutProposals.delete(key);
+    while(this.layoutProposals.size>=100){const oldest=this.layoutProposals.keys().next().value;if(!oldest)break;this.layoutProposals.delete(oldest);}
+    this.layoutProposals.set(p.proposalHash,{expiresAt:now+10*60*1000,workspaceId:user.workspaceId,actorId:user.id,pageId,spaceId:p.access.page.spaceId,versionId:p.version.id,sourceHash:p.sourceHash,assetStamp:p.assetStamp,rendererHash:p.rendererHash,targetToken:p.token,binding:p.plan.binding,bindingHash:p.bindingHash,summary:p.plan.summary});
     return {proposalHash:p.proposalHash,versionId:p.version.id,revision:p.version.revision,summary:p.plan.summary,recommendation:{templateId:p.decision.template.id,templateVersion:p.decision.template.version,density:p.decision.density}};
   }
   async applyLayout(pageId:string,_selection:{id:string;version:string;density:string},proposalHash:string,autoUpdate:boolean,user:User){
@@ -96,7 +98,7 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
     const access=await this.access(pageId,user,true);if(access.page.spaceId!==p.spaceId)throw new ConflictException('SOURCE_MOVED');
     const targetState=await this.store.target(user.workspaceId,pageId);if(handbookTargetToken(targetState)!==p.targetToken)throw new ConflictException('LAYOUT_TARGET_CHANGED');
     const latest=await this.latest(pageId,access.user);if(latest.id!==p.versionId)throw new ConflictException('LAYOUT_SOURCE_CHANGED');
-    const source=await this.history.displaySource(pageId,p.versionId,access.user);if(canonicalJson(source)!==p.sourceJson||await this.mediaStamp(source.content,access.user,c.origin)!==p.assetStamp)throw new ConflictException('LAYOUT_SOURCE_CHANGED');
+    const source=await this.history.displaySource(pageId,p.versionId,access.user);if(hash(canonicalJson(source))!==p.sourceHash||await this.mediaStamp(source.content,access.user,c.origin)!==p.assetStamp)throw new ConflictException('LAYOUT_SOURCE_CHANGED');
     try{await this.store.configure({workspaceId:user.workspaceId,pageId,spaceId:p.spaceId,actorId:user.id,binding:p.binding,bindingHash:p.bindingHash,autoUpdate},{targetToken:p.targetToken,versionId:p.versionId});}
     catch(e){if(e instanceof Error&&['LAYOUT_TARGET_CHANGED','LAYOUT_SOURCE_CHANGED'].includes(e.message))throw new ConflictException(e.message);throw e;}
     this.layoutProposals.delete(proposalHash);

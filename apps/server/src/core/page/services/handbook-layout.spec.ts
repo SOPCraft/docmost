@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { HandbookService } from './handbook.service';
 import { canonicalJson } from '../../../integrations/versioning/version-snapshot';
 
@@ -10,7 +10,7 @@ function fixture(){
  const store={configure:jest.fn().mockResolvedValue({}),target:jest.fn().mockResolvedValue(undefined)};
  const service=new HandbookService({} as any,store as any,history as any,{} as any,{} as any,{} as any,{} as any,{} as any,{} as any,{} as any);
  const access={user,page:{id:pageId,spaceId,slugId:'fixed'}} as any,version={id:versionId,revision:3};
- const prepared={access,plan:{binding:{schema:'binding'},summary:{modelUsed:true,planner:'pi-layout-designer/1',counts:{blocks:1}}},token:null,bindingHash:'binding-hash',version,proposalHash:'proposal-hash',sourceJson:canonicalJson(source),assetStamp:'asset-stamp',rendererHash:'renderer-hash',decision:{template:{id:'chapter-reader',version:'1.0.0'},density:'comfortable'}};
+ const prepared={access,plan:{binding:{schema:'binding'},summary:{modelUsed:true,planner:'pi-layout-designer/1',counts:{blocks:1}}},token:null,bindingHash:'binding-hash',version,proposalHash:'proposal-hash',sourceHash:createHash('sha256').update(canonicalJson(source)).digest('hex'),assetStamp:'asset-stamp',rendererHash:'renderer-hash',decision:{template:{id:'chapter-reader',version:'1.0.0'},density:'comfortable'}};
  jest.spyOn(service as any,'prepareLayout').mockResolvedValue(prepared);
  jest.spyOn(service,'configuration').mockResolvedValue({origin:'http://127.0.0.1:3026',rendererHash:'renderer-hash',runner:'/trusted/runner'});
  jest.spyOn(service as any,'access').mockResolvedValue(access);
@@ -28,4 +28,5 @@ describe('first-layout preview and explicit confirmation',()=>{
  it('a changed source invalidates the exact preview instead of silently recomputing it',async()=>{const f=fixture();await preview(f);f.history.displaySource.mockResolvedValueOnce({...f.source,title:'changed'});await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',true,f.user)).rejects.toThrow(ConflictException);expect(f.store.configure).not.toHaveBeenCalled();});
  it.each(['LAYOUT_TARGET_CHANGED','LAYOUT_SOURCE_CHANGED'])('transaction conflict %s never starts a replacement job',async code=>{const f=fixture();await preview(f);f.store.configure.mockRejectedValue(new Error(code));await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',false,f.user)).rejects.toThrow(ConflictException);expect(f.refresh).not.toHaveBeenCalled();});
  it('proposal ownership cannot cross actors or workspaces',async()=>{const f=fixture();await preview(f);await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',true,{...f.user,id:randomUUID()})).rejects.toThrow(ConflictException);expect(f.store.configure).not.toHaveBeenCalled();});
+ it('a newer preview for the same actor and page invalidates the older proposal instead of accumulating them',async()=>{const f=fixture(),second={...f.prepared,proposalHash:'proposal-new'};(f.service as any).prepareLayout.mockResolvedValueOnce(f.prepared).mockResolvedValueOnce(second);await f.service.previewLayout(f.pageId,f.selection,f.user);await f.service.previewLayout(f.pageId,f.selection,f.user);expect((f.service as any).layoutProposals.size).toBe(1);await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',true,f.user)).rejects.toThrow(ConflictException);});
 });
