@@ -10,7 +10,7 @@ export default function PiServiceModelEditor({model,opened,busy,onClose,onSave,e
   if(!id||id.length>160){setError('请填写有效的模型编号。');return;}
   if(!model&&existingIds.includes(id)){setError('模型编号已存在，请编辑原模型。');return;}
   if(!Number.isInteger(form.contextWindow)||form.contextWindow<256||form.contextWindow>2000000||!Number.isInteger(form.maxTokens)||form.maxTokens<256||form.maxTokens>200000||form.maxTokens>form.contextWindow){setError('上下文和输出上限无效；输出不能超过上下文。');return;}
-  await onSave({...form,modelId:id,label:form.label.trim()||id,origin:'manual'});
+  await onSave({...form,modelId:id,label:form.label.trim()||id,limitsKnown:true,origin:'manual'});
  }
  const capability=(name:'streaming'|'tools',checked:boolean)=>setForm(current=>({...current,capabilities:{...current.capabilities,[name]:checked}}));
  return <Modal opened={opened} onClose={()=>{if(!busy)onClose();}} title={model?'编辑模型':'新建模型'} centered size="md" closeOnClickOutside={false} closeOnEscape={!busy} closeButtonProps={{disabled:busy,'aria-label':'关闭模型编辑'}}>
