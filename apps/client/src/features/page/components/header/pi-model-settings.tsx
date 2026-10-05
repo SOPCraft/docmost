@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActionIcon, Alert, Badge, Button, Collapse, Group, Loader, Modal, NumberInput, PasswordInput, Select, Stack, Switch, Text, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Badge, Button, Group, Loader, Modal, NumberInput, PasswordInput, Select, Stack, Switch, Text, TextInput, Tooltip } from '@mantine/core';
 import { IconArrowLeft, IconChevronDown, IconCpu, IconKey, IconLock, IconPencil, IconPlugConnected, IconPlus, IconSearch, IconSettings2, IconTrash } from '@tabler/icons-react';
 import { piError, piRequest } from './pi-workbench-api';
 import { editModel, endpointPreview, groupProviders, modelErrors, newModel, protocols, providerName } from './pi-model-config';
@@ -60,6 +60,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
     const payload = remove && deleting ? editModel(deleting) : { ...form, modelId: form.modelId.trim(), baseUrl: form.baseUrl.trim() };
     if (!remove) {
       const errors = modelErrors(payload, settings, !editing || editing.original !== null);
+      if (editing?.providerNew && settings.models.some(item => item.provider === payload.provider)) errors.provider = '服务商已存在，请在它的模型列表中添加模型。';
       if (Object.keys(errors).length) { setFields(errors); if (errors.contextWindow || errors.maxTokens) setAdvanced(true); return; }
     }
     const generation = epoch.current; setBusy(true); setError(''); setNotice('');
@@ -123,7 +124,7 @@ export default function PiModelSettings({ opened, onClose, onSaved }: { opened: 
                   <TextInput label="显示名称" placeholder="用于对话中的模型选择，可留空" value={form.label} onChange={event => change('label', event.currentTarget.value)} />
                   <div className={styles.capabilities}><Switch size="sm" label="图片输入" checked={form.input.includes('image')} onChange={event => change('input', event.currentTarget.checked ? ['text', 'image'] : ['text'])} /><Switch size="sm" label="思考强度" checked={form.reasoning} onChange={event => change('reasoning', event.currentTarget.checked)} /></div>
                   <button type="button" className={styles.advancedToggle} aria-expanded={advanced} onClick={() => setAdvanced(value => !value)}><IconSettings2 size={15} />高级参数<IconChevronDown size={14} style={{ transform: advanced ? 'rotate(180deg)' : undefined }} /></button>
-                  <Collapse in={advanced}><div className={styles.advanced}><NumberInput label="上下文上限" value={form.contextWindow} min={256} max={2000000} onChange={value => change('contextWindow', Number(value))} error={fields.contextWindow} /><NumberInput label="输出上限" value={form.maxTokens} min={256} max={200000} onChange={value => change('maxTokens', Number(value))} error={fields.maxTokens} /><Text size="xs" c="dimmed">按服务商能力填写；这些数值不是系统探测结果。</Text></div></Collapse>
+                  {advanced && <div className={styles.advanced}><NumberInput label="上下文上限" value={form.contextWindow} min={256} max={2000000} onChange={value => change('contextWindow', Number(value))} error={fields.contextWindow} /><NumberInput label="输出上限" value={form.maxTokens} min={256} max={200000} onChange={value => change('maxTokens', Number(value))} error={fields.maxTokens} /><Text size="xs" c="dimmed">按服务商能力填写；这些数值不是系统探测结果。</Text></div>}
                 </Stack>
               </section> : group && <section className={styles.section} aria-label="服务商模型列表">
                 <div className={styles.sectionHeading}><Text fw={600} size="sm">模型</Text><Badge variant="light" color="gray" size="xs">{group.models.length}</Badge><Button variant="default" size="compact-xs" leftSection={<IconPlus size={13} />} onClick={addModel}>添加模型</Button></div>
