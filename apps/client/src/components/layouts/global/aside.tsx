@@ -36,6 +36,8 @@ const HistorySidebar = lazy(
   () => import("@/features/page-versions/history-sidebar"),
 );
 
+const PiWorkbenchSidebar = lazy(() => import("@/features/page/components/header/pi-workbench-panel"));
+
 export default function Aside() {
   const [{ tab, isAsideOpen }, setAsideState] = useAtom(asideStateAtom);
   const { t } = useTranslation();
@@ -62,6 +64,10 @@ export default function Aside() {
   let component: ReactNode;
 
   switch (tab) {
+    case "pi":
+      component = <PiWorkbenchSidebar />;
+      title = "智能体对话";
+      break;
     case "history":
       component = isAsideOpen ? <HistorySidebar /> : null;
       title = "Page history";
@@ -90,10 +96,10 @@ export default function Aside() {
   return (
     <Box
       p="md"
-      tabIndex={tab === "history" ? -1 : undefined}
+      tabIndex={tab === "history" || tab === "pi" ? -1 : undefined}
       data-history-panel-body={tab === "history" ? "true" : undefined}
       onKeyDown={(e) => {
-        if (tab === "history" && e.key === "Escape" && !e.defaultPrevented)
+        if ((tab === "history" || tab === "pi") && e.key === "Escape" && !e.defaultPrevented)
           closeAside();
       }}
       style={{
@@ -124,7 +130,7 @@ export default function Aside() {
           )}
 
           <Suspense fallback={null}>
-            {tab === "comments" || tab === "chat" || tab === "history" ? (
+            {tab === "comments" || tab === "chat" || tab === "history" || tab === "pi" ? (
               component
             ) : (
               <ScrollArea

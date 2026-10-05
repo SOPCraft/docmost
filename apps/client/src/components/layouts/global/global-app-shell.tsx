@@ -168,11 +168,13 @@ export default function GlobalAppShell({
             id={ASIDE_PANEL_ID}
             tabIndex={-1}
             className={classes.aside}
-            p={asideTab === "history" ? 0 : "md"}
+            p={asideTab === "history" || asideTab === "pi" ? 0 : "md"}
             data-history-drawer={asideTab === "history" ? "true" : undefined}
             withBorder={false}
             aria-label={
-              asideTab === "history"
+              asideTab === "pi"
+                ? "智能体对话"
+                : asideTab === "history"
                 ? "历史版本筛选与列表"
                 : asideTab === "comments"
                   ? t("Comments")
