@@ -36,16 +36,20 @@ const HistorySidebar = lazy(
   () => import("@/features/page-versions/history-sidebar"),
 );
 
+const PiWorkbenchSidebar = lazy(() => import("@/features/page/components/header/pi-workbench-panel"));
+
+import { shouldClosePiAside } from "@/features/page/components/header/pi-aside-keyboard";
+
 export default function Aside() {
   const [{ tab, isAsideOpen }, setAsideState] = useAtom(asideStateAtom);
   const { t } = useTranslation();
   const pageEditor = useAtomValue(pageEditorAtom);
   const closeAside = () => {
     setAsideState((s) => ({ ...s, isAsideOpen: false }));
-    if (tab === "history")
+    if (tab === "history" || tab === "pi")
       requestAnimationFrame(() =>
         document
-          .querySelector<HTMLElement>('[data-testid="history-trigger"]')
+          .querySelector<HTMLElement>(tab === 'pi' ? '[data-testid="pi-workbench-trigger"]' : '[data-testid="history-trigger"]')
           ?.focus(),
       );
   };
@@ -62,6 +66,10 @@ export default function Aside() {
   let component: ReactNode;
 
   switch (tab) {
+    case "pi":
+      component = <PiWorkbenchSidebar />;
+      title = "智能体对话";
+      break;
     case "history":
       component = isAsideOpen ? <HistorySidebar /> : null;
       title = "Page history";
@@ -90,10 +98,10 @@ export default function Aside() {
   return (
     <Box
       p="md"
-      tabIndex={tab === "history" ? -1 : undefined}
+      tabIndex={tab === "history" || tab === "pi" ? -1 : undefined}
       data-history-panel-body={tab === "history" ? "true" : undefined}
       onKeyDown={(e) => {
-        if (tab === "history" && e.key === "Escape" && !e.defaultPrevented)
+        if (tab === "pi" ? shouldClosePiAside(e) : tab === "history" && e.key === "Escape" && !e.defaultPrevented)
           closeAside();
       }}
       style={{
@@ -124,7 +132,7 @@ export default function Aside() {
           )}
 
           <Suspense fallback={null}>
-            {tab === "comments" || tab === "chat" || tab === "history" ? (
+            {tab === "comments" || tab === "chat" || tab === "history" || tab === "pi" ? (
               component
             ) : (
               <ScrollArea

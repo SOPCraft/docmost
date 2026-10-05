@@ -17,11 +17,13 @@ import { HandbookController } from './handbook.controller';
 import { HandbookService } from './services/handbook.service';
 import { HandbookJobStore } from './services/handbook-job.store';
 import { PiSopController } from './pi-sop.controller';
+import { PiWorkbenchController } from './pi-workbench.controller';
+import { PiWorkbenchService } from './services/pi-workbench.service';
 import { PiSopService } from './services/pi-sop.service';
 import { PiSopRuntimeService } from './services/pi-sop-runtime.service';
 
 @Module({
-  controllers: [PageController, VersionHistoryController, HandbookController, PiSopController],
+  controllers: [PageController, VersionHistoryController, HandbookController, PiSopController, PiWorkbenchController],
   providers: [
     PageService,
     VersionedTrashService,
@@ -29,6 +31,7 @@ import { PiSopRuntimeService } from './services/pi-sop-runtime.service';
     HandbookService,
     HandbookJobStore,
     PiSopService,
+    PiWorkbenchService,
     PiSopRuntimeService,
     PageHistoryService,
     TrashCleanupService,
