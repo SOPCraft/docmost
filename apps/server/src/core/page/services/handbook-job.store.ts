@@ -15,6 +15,7 @@ export interface HandbookJob {
   versionId:string; revision:number; binding:any; bindingHash:string; rendererHash:string; assetStamp:string;
   state:'queued'|'running'|'succeeded'|'failed'|'superseded'; attempts:number;
   leaseToken:string|null; leaseUntil:Date|null; manifest:any; storagePrefix:string|null; lastErrorCode:string|null;
+  createdAt?:Date; completedAt?:Date|null;
 }
 @Injectable()
 export class HandbookJobStore {
@@ -24,6 +25,10 @@ export class HandbookJobStore {
   }
   async job(workspaceId:string,pageId:string,id:string):Promise<HandbookJob|undefined> {
     return (await sql<HandbookJob>`SELECT * FROM sop_handbook_jobs WHERE workspace_id=${workspaceId}::uuid AND page_id=${pageId}::uuid AND id=${id}::uuid`.execute(this.db)).rows[0];
+  }
+  async history(workspaceId:string,pageId:string,limit=12):Promise<HandbookJob[]> {
+    const bounded=Math.max(1,Math.min(20,limit));
+    return (await sql<HandbookJob>`SELECT * FROM sop_handbook_jobs WHERE workspace_id=${workspaceId}::uuid AND page_id=${pageId}::uuid AND state='succeeded' AND storage_prefix IS NOT NULL ORDER BY completed_at DESC NULLS LAST,revision DESC,id DESC LIMIT ${bounded}`.execute(this.db)).rows;
   }
   async configure(value:{workspaceId:string;pageId:string;spaceId:string;actorId:string;binding:any;bindingHash:string;autoUpdate:boolean}, guard?:{targetToken:string|null;versionId:string}) {
     return this.db.transaction().execute(async tx=>{

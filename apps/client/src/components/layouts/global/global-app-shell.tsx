@@ -177,7 +177,7 @@ export default function GlobalAppShell({
             withBorder={false}
             aria-label={
               asideTab === "pi"
-                ? "智能体对话"
+                ? "SOP手册"
                 : asideTab === "history"
                 ? "历史版本筛选与列表"
                 : asideTab === "comments"
