@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { webcrypto } from 'node:crypto';
 import { PiWorkbenchPanel } from './pi-workbench-panel';
 
-const mocks = vi.hoisted(() => ({ post: vi.fn(), revoked: false, opened: true }));
+const mocks = vi.hoisted(() => ({ post: vi.fn(), setAside: vi.fn(), revoked: false, opened: true }));
 vi.mock('@/lib/api-client', () => ({ default: { post: mocks.post } }));
-vi.mock('jotai', () => ({ useAtomValue: () => ({ isAsideOpen: mocks.opened, tab: 'pi' }) }));
+vi.mock('jotai', () => ({ useAtomValue: () => ({ isAsideOpen: mocks.opened, tab: 'pi' }), useSetAtom: () => mocks.setAside }));
 vi.mock('@/features/user/atoms/current-user-atom', () => ({ currentUserAtom: {} }));
 vi.mock('@/components/layouts/global/hooks/atoms/sidebar-atom', () => ({ asideStateAtom: {} }));
 vi.mock('@/features/page/queries/page-query', () => ({ usePageQuery: () => ({ data: null }) }));
@@ -44,7 +44,7 @@ async function revoke() {
   await screen.findByText(/某份来源版本已不可访问/);
 }
 beforeEach(() => {
-  mocks.revoked = false; mocks.opened = true;
+  mocks.revoked = false; mocks.opened = true; mocks.setAside.mockReset();
   vi.stubGlobal('localStorage', { getItem: () => sessionId, setItem() {}, removeItem() {} });
   vi.stubGlobal('crypto', webcrypto);
   Object.defineProperty(document, 'fonts', { configurable: true, value: new EventTarget() });
