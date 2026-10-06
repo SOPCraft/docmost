@@ -7,6 +7,7 @@ import { useAtomValue } from 'jotai';
 import { currentUserAtom } from '@/features/user/atoms/current-user-atom';
 import api from '@/lib/api-client';
 import { PiClaim, PiPreview, PiReference, PiSource, PiStatus, piErrorMessage, selectionIds } from './pi-sop-types';
+import classes from './pi-sop.module.css';
 
 type Candidate = { id: string; title: string };
 export default function PiSopButton({ pageId, title }: { pageId: string; title: string }) {
@@ -19,7 +20,7 @@ function References({ items }: { items: PiReference[] }) {
 }
 function Claim({ value }: { value: PiClaim }) {
   const labels = { source: '来自资料', suggestion: '新增建议', missing: '待补充' };
-  return <Stack gap={4}><Badge variant="light">{labels[value.kind]}</Badge><Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value.text}</Text><References items={value.references} /></Stack>;
+  return <Stack gap={4} className={classes.claim}><Badge variant="light">{labels[value.kind]}</Badge><Text size="sm" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value.text}</Text><References items={value.references} /></Stack>;
 }
 export function PiDraftPreview({ result }: { result: PiPreview }) {
   const draft = result.draft;
@@ -131,27 +132,28 @@ function Entry({ pageId, title, userId }: { pageId: string; title: string; userI
 
   return <>
     <Button aria-label="流程整理" variant="subtle" size="compact-sm" leftSection={<IconSparkles size={16} />} data-testid="pi-sop-trigger" onClick={() => setOpened(true)}>流程整理</Button>
-    <Drawer opened={opened} onClose={close} title="流程整理" position="right" size="lg">
-      <Stack gap="md">
-        <Text size="sm">选择一篇或多篇资料，使用内置技能梳理步骤、责任人、检查项与异常处理。不会覆盖原稿。</Text>
+    <Drawer opened={opened} onClose={close} title="流程整理" position="right" size="lg" classNames={{content:classes.drawer,body:classes.body}}>
+      <div className={classes.shell}>
+        <div className={classes.intro}><div className={classes.introTitle}>把现有资料整理成可核对的流程草稿</div><div className={classes.introText}>只读取你明确选中的固定版本。技能负责梳理结构，模型生成待核对草稿；不会覆盖原稿，也不会把未读取的图片、视频或链接当作已理解内容。</div>
+          <div className={classes.runtime}><span>内置技能：{status.data?.skill?.label || "通用流程整理"}</span><span>模型：{status.data?.enabled ? status.data.model?.label || "已配置" : "尚未配置"}</span></div>
+        </div>
         {status.isLoading && <Text role="status">正在检查访问权限和模型设置。</Text>}
         {!status.isLoading && !status.isError && !status.data?.enabled && <Alert>管理员尚未为当前工作空间启用模型。模型地址和密钥只在服务端配置。</Alert>}
-        {<>
-          <Text size="sm">内置技能：{status.data?.skill?.label || "通用流程整理"}；模型：{status.data?.enabled ? `${status.data.model?.label}（管理员配置）` : "尚未配置"}。</Text>
-          {status.data?.enabled && <Alert>点击整理后，所选资料的文字与表格文字会发送给上述模型。图片、视频和链接目标暂不解析。</Alert>}
-          <Text fw={600}>已选资料（{selected.length}/10）</Text>
-          {selected.map(item => <Group key={item.id} justify="space-between" wrap="nowrap"><Text size="sm" style={{ overflowWrap: 'anywhere' }}>{item.title || '未命名文档'}</Text><ActionIcon aria-label={`移除${item.title}`} disabled={busy} onClick={() => { invalidate(); setSelected(selected.filter(value => value.id !== item.id)); }}><IconX size={16} /></ActionIcon></Group>)}
+        {status.data?.enabled && <Alert className={classes.notice}>整理时只发送所选资料中的文字与表格文字。图片、视频和链接目标暂不解析。</Alert>}
+        <section className={classes.section}>
+          <div className={classes.sectionHeader}><div className={classes.sectionTitle}>已选资料</div><div className={classes.sectionMeta}>{selected.length}/10</div></div>
+          <div className={classes.sourceList}>{selected.map(item => <div className={classes.sourceItem} key={item.id}><div className={classes.sourceTitle}>{item.title || "未命名文档"}</div><ActionIcon variant="subtle" aria-label={`移除${item.title}`} disabled={busy} onClick={() => { invalidate(); setSelected(selected.filter(value => value.id !== item.id)); }}><IconX size={15} /></ActionIcon></div>)}</div>
           <TextInput label="添加资料" placeholder="输入至少两个字搜索文档标题" value={query} disabled={busy || selected.length >= 10} onChange={event => setQuery(event.currentTarget.value)} />
           {search.isError && <Text size="sm" c="red">搜索失败，未添加任何资料。</Text>}
-          {debounced.trim().length >= 2 && search.data?.filter(item => !selected.some(value => value.id === item.id)).slice(0, 10).map(item => <Button key={item.id} variant="light" disabled={busy || selected.length >= 10} onClick={() => { invalidate(); setSelected([...selected, item]); setQuery(''); }}>{item.title || '未命名文档'}</Button>)}
-          <Textarea label="整理要求" value={instruction} maxLength={4000} autosize minRows={3} disabled={busy} onChange={event => { invalidate(); setInstruction(event.currentTarget.value); }} />
-          <Group><Button data-testid="pi-sop-generate" loading={busy} disabled={!selected.length || status.isError || !status.data?.enabled} onClick={() => { void generate(); }}>整理选中资料</Button>{busy && <Button variant="default" onClick={() => { invalidate(); setError('本次整理已取消。'); }}>取消本次整理</Button>}</Group>
-          {busy && <Text role="status">正在固定来源、调用指定技能并校验结果；尚未保存任何内容。</Text>}
-        </>}
+          {debounced.trim().length >= 2 && search.data?.filter(item => !selected.some(value => value.id === item.id)).slice(0, 10).map(item => <Button className={classes.searchResult} key={item.id} variant="light" disabled={busy || selected.length >= 10} onClick={() => { invalidate(); setSelected([...selected, item]); setQuery(''); }}>{item.title || '未命名文档'}</Button>)}
+        </section>
+        <section className={classes.section}><div className={classes.sectionHeader}><div className={classes.sectionTitle}>整理要求</div><div className={classes.sectionMeta}>结果先预览，不自动保存</div></div><Textarea label="整理要求" value={instruction} maxLength={4000} autosize minRows={3} disabled={busy} onChange={event => { invalidate(); setInstruction(event.currentTarget.value); }} /></section>
+        <div className={classes.actions}><Button data-testid="pi-sop-generate" loading={busy} disabled={!selected.length || status.isError || !status.data?.enabled} onClick={() => { void generate(); }}>整理选中资料</Button>{busy && <Button variant="default" onClick={() => { invalidate(); setError('本次整理已取消。'); }}>取消本次整理</Button>}</div>
+        {busy && <Text role="status" size="sm">正在固定来源、调用指定技能并校验结果；尚未保存任何内容。</Text>}
         {error && <Alert color="red" role="alert">{error}</Alert>}
-        {pinned.length > 0 && <Stack gap={4}>{pinned.map((item, index) => <Text key={item.pageId} size="xs">来源{index + 1}：{item.title} · 固定第{item.revision}版</Text>)}</Stack>}
-        {result && <PiDraftPreview result={result} />}
-      </Stack>
+        {pinned.length > 0 && <div className={classes.pinned}>{pinned.map((item, index) => <span key={item.pageId}>来源{index + 1}：{item.title} · 固定第{item.revision}版</span>)}</div>}
+        {result && <div className={classes.preview}><PiDraftPreview result={result} /></div>}
+      </div>
     </Drawer>
   </>;
 }

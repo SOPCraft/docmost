@@ -12,7 +12,7 @@ function fixture(){
  const store={job:jest.fn(async(w,p,id)=>w===user.workspaceId&&p===page.id&&id===job.id?job:undefined)};
  const storage={exists:jest.fn(async()=>true),read:jest.fn(async()=>bytes)};
  const attachmentRepo={findById:jest.fn(async()=>asset)};
- const service=new HandbookService({} as any,store as any,history as any,users as any,{} as any,attachmentRepo as any,storage as any,{} as any,{} as any);
+ const service=new HandbookService({} as any,store as any,history as any,users as any,{} as any,attachmentRepo as any,storage as any,{} as any,{} as any,{} as any);
  jest.spyOn(service,'configuration').mockResolvedValue({origin:'http://127.0.0.1:3026',rendererHash:'a'.repeat(64),runner:'/trusted/runner'});
  return {user,page,mediaPage,job,asset,bytes,service,store,storage,history,users,attachmentRepo,revokePage:()=>pageAllowed=false,revokeMedia:()=>assetAllowed=false,deactivate:()=>accountActive=false};
 }

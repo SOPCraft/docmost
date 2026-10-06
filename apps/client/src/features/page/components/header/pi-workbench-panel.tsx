@@ -10,7 +10,7 @@ import { asideStateAtom } from '@/components/layouts/global/hooks/atoms/sidebar-
 import { usePageQuery } from '@/features/page/queries/page-query';
 import { extractPageSlugId } from '@/lib';
 import api from '@/lib/api-client';
-import { PiConversation, PiView, piError, piRequest, selectedConversationKey } from './pi-workbench-api';
+import { PiConversation, PiModel, PiView, piError, piRequest, selectedConversationKey } from './pi-workbench-api';
 import { PiTranscript } from './pi-workbench-messages';
 import PiWorkbenchQuestion from './pi-workbench-question';
 import PiModelSettings from './pi-model-settings';
@@ -33,34 +33,44 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const [sessionId,setSessionId]=useState(()=>{try{return localStorage.getItem(storageKey)||'';}catch{return '';}});
   const [text,setText]=useState(''),[error,setError]=useState(''),[posting,setPosting]=useState(false),[sourcePicker,setSourcePicker]=useState(false);
   const [query,setQuery]=useState(''),[debounced]=useDebouncedValue(query,300),[selected,setSelected]=useState<Candidate[]>([{id:pageId,title}]);
-  const [mode,setMode]=useState('followUp'),[image,setImage]=useState<ImageInput|null>(null),[advanced,setAdvanced]=useState(false),[modelSettings,setModelSettings]=useState(false);
+  const [mode,setMode]=useState('followUp'),[image,setImage]=useState<ImageInput|null>(null),[advanced,setAdvanced]=useState(false),[modelSettings,setModelSettings]=useState(false),[pendingModel,setPendingModel]=useState('');
   const [operation,setOperation]=useState('get_state'),[parameters,setParameters]=useState('{}'),[inspection,setInspection]=useState<unknown>(null);
   const [files,setFiles]=useState<{name:string;bytes:number}[]>([]),[unknown,setUnknown]=useState(false);
   const transcript=useRef<HTMLDivElement>(null),followBottom=useRef(true),fileInput=useRef<HTMLInputElement>(null),epoch=useRef(0);
   const openGate=useRef({opened,epoch:0});
   if(openGate.current.opened!==opened)openGate.current={opened,epoch:openGate.current.epoch+(opened?1:0)};
-  const status=useQuery({queryKey:['pi-workbench-status',workspaceId,userId,pageId,openGate.current.epoch],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:unknown[];canManageModels?:boolean}>('status',{pageId},signal)});
+  const status=useQuery({queryKey:['pi-workbench-status',workspaceId,userId,pageId,openGate.current.epoch],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:PiModel[];configuredModels?:PiModel[];canManageModels?:boolean}>('status',{pageId},signal)});
   const sessions=useQuery({queryKey:['pi-workbench-list',workspaceId,userId,openGate.current.epoch],enabled:opened&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?10000:false,queryFn:({signal})=>piRequest<{items:PiConversation[]}>('list',{},signal)});
   const view=useQuery({queryKey:['pi-workbench-view',workspaceId,userId,sessionId,openGate.current.epoch],enabled:opened&&!!sessionId&&!!status.data?.enabled,retry:false,gcTime:0,refetchInterval:opened?1000:false,queryFn:({signal})=>piRequest<PiView>('view',{sessionId,after:0},signal)});
   const search=useQuery({queryKey:['pi-workbench-search',workspaceId,userId,debounced,openGate.current.epoch],enabled:opened&&sourcePicker&&debounced.trim().length>=2,retry:false,gcTime:0,queryFn:async({signal})=>(await api.post<{items:Candidate[]}>('/search',{query:debounced,titleOnly:true},{signal})).data.items});
   const accessFailed=view.isError||status.isError||sessions.isError;
   const data=opened&&!accessFailed?view.data:undefined,busy=!!data?.busy||!!data?.state.isStreaming||!!data?.state.isCompacting;
   const ready=status.data?.enabled&&!status.isError;
-  const configured=!!data?.models?.length || (!sessionId&&!!status.data?.models?.length);
+  const statusModels=status.data?.models||[],availableModels=data?.models?.length?data.models:statusModels;
+  const configured=availableModels.length>0,hasSavedModels=!!status.data?.configuredModels?.length;
+  const modelKey=(model:PiModel)=>`${model.provider}/${model.id}`;
+  const currentModel=data?.state.model?modelKey(data.state.model):'';
+  const pendingAvailable=pendingModel&&availableModels.some(model=>modelKey(model)===pendingModel);
+  const selectedModel=currentModel||(pendingAvailable?pendingModel:(availableModels[0]?modelKey(availableModels[0]):''));
+  const desiredModel=availableModels.find(model=>modelKey(model)===selectedModel);
   useEffect(()=>{if(followBottom.current&&transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;},[data?.messages,data?.partial,data?.dialogs]);
   useEffect(()=>()=>{epoch.current++;},[]);
   useEffect(()=>{
     if(!accessFailed)return;
     epoch.current++;setPosting(false);setInspection(null);setFiles([]);setImage(null);setUnknown(true);
   },[accessFailed]);
-  function choose(id:string){epoch.current++;setPosting(false);setSessionId(id);setText('');setImage(null);setError('');setUnknown(false);setInspection(null);setFiles([]);try{localStorage.setItem(storageKey,id);}catch{}}
+  function choose(id:string){epoch.current++;setPosting(false);setSessionId(id);setPendingModel('');setText('');setImage(null);setError('');setUnknown(false);setInspection(null);setFiles([]);try{localStorage.setItem(storageKey,id);}catch{}}
   async function createConversation(pageIds=selected.map(item=>item.id)){
     const result=await piRequest<PiConversation>('create',{sessionId:crypto.randomUUID(),pageIds});
     await client.invalidateQueries({queryKey:['pi-workbench-list',workspaceId,userId]});return result.id;
   }
   async function startNew(){
     if(posting||!ready)return;const generation=epoch.current;setPosting(true);setError('');
-    try{const id=await createConversation(sessionId?[pageId]:selected.map(item=>item.id));if(epoch.current===generation){choose(id);setSelected([{id:pageId,title}]);}}
+    try{
+      const id=await createConversation(sessionId?[pageId]:selected.map(item=>item.id));
+      if(epoch.current===generation&&desiredModel)await command('set_model',{provider:desiredModel.provider,modelId:desiredModel.id},id);
+      if(epoch.current===generation){choose(id);setSelected([{id:pageId,title}]);}
+    }
     catch(failure){if(epoch.current===generation)setError(piError(failure));}
     finally{if(epoch.current===generation)setPosting(false);}
   }
@@ -81,7 +91,10 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     if(!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/')))return;
     const generation=epoch.current,message=text,attachment=image;let target=sessionId;setPosting(true);setError('');
     try{
-      if(!target){target=await createConversation();if(epoch.current!==generation)return;setSessionId(target);try{localStorage.setItem(storageKey,target);}catch{}}
+      if(!target){
+        target=await createConversation();if(epoch.current!==generation)return;setSessionId(target);try{localStorage.setItem(storageKey,target);}catch{}
+        if(desiredModel){await command('set_model',{provider:desiredModel.provider,modelId:desiredModel.id},target);if(epoch.current!==generation)return;setPendingModel('');}
+      }
       await command('prompt',{message,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},target);
       if(epoch.current===generation){setText(current=>current===message?'':current);setImage(current=>current===attachment?null:current);followBottom.current=true;}
     }catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
@@ -163,12 +176,12 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
         <Tooltip label="添加图片"><ActionIcon variant="subtle" color="gray" aria-label="添加图片" disabled={accessFailed} onClick={()=>fileInput.current?.click()}><IconPaperclip size={16}/></ActionIcon></Tooltip>
         <input ref={fileInput} hidden type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={event=>void loadImage(event.target.files?.[0])}/>
         <Menu position="top-start"><Menu.Target><ActionIcon variant="subtle" color="gray" aria-label="选择技能与命令"><IconSparkles size={15}/></ActionIcon></Menu.Target><Menu.Dropdown>{data?.commands?.length?data.commands.map(item=><Menu.Item key={item.name} onClick={()=>setText(`/${item.name} ${text}`)}>{item.description||`${item.name}（${item.source==='skill'?'技能':'命令'}）`}</Menu.Item>):<Menu.Item disabled>会话启动后加载原生技能</Menu.Item>}</Menu.Dropdown></Menu>
-        <div className={classes.model}>{!configured&&status.data?.canManageModels?<button type="button" className={classes.setupModel} onClick={()=>setModelSettings(true)}><IconSettings2 size={13}/>配置模型</button>:<Select aria-label="模型" placeholder="未配置模型" size="xs" value={data?.state.model?`${data.state.model.provider}/${data.state.model.id}`:null} data={(data?.models||[]).map(model=>({value:`${model.provider}/${model.id}`,label:`${model.name||model.id}（模型）`}))} disabled={!sessionId||posting||busy||accessFailed} onChange={value=>{const model=data?.models.find(item=>`${item.provider}/${item.id}`===value);if(model)void act('set_model',{provider:model.provider,modelId:model.id});}}/>}</div>
+        <div className={classes.model}>{!configured&&status.data?.canManageModels?<button type="button" className={classes.setupModel} onClick={()=>setModelSettings(true)}><IconSettings2 size={13}/>{hasSavedModels?'验证模型':'配置模型'}</button>:<Select aria-label="模型" placeholder="未配置模型" size="xs" value={selectedModel||null} data={availableModels.map(model=>({value:modelKey(model),label:model.name||model.label||model.id}))} disabled={posting||busy||accessFailed||!availableModels.length} onChange={value=>{if(!value)return;const model=availableModels.find(item=>modelKey(item)===value);if(!model)return;if(!sessionId){setPendingModel(value);return;}void act('set_model',{provider:model.provider,modelId:model.id});}}/>}</div>
         {busy?<ActionIcon variant="filled" color="gray" aria-label="停止当前运行" onClick={()=>void act('abort')}><IconSquare size={13}/></ActionIcon>:<ActionIcon variant="filled" className={brand.send} aria-label="发送消息" title={!configured&&!text.trim().startsWith("/")?"请先配置模型":"发送消息"} disabled={!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/'))} onClick={()=>void send()}><IconArrowUp size={17}/></ActionIcon>}
       </div>
       {busy&&<Group px="xs" pb="xs" gap={6}><Select aria-label="运行中补充方式" size="xs" value={mode} onChange={value=>value&&setMode(value)} data={[{value:'steer',label:'纠正当前任务'},{value:'followUp',label:'排队追加任务'}]} style={{flex:1}}/><Button size="xs" disabled={!text.trim()||posting||unknown||accessFailed} onClick={()=>void send()}>追加</Button></Group>}
     </div>
-    <div className={classes.hint}>{status.isError?'执行器连接失败。':!ready?status.isLoading?'正在检查执行器连接。':'执行器尚未配置。':!configured?'尚未配置实际模型；不会使用模拟回复冒充生成。':'所选资料会交给当前模型处理。原稿不变，收起面板不会删除对话。'}</div>
+    <div className={classes.hint}>{status.isError?'执行器连接失败。':!ready?status.isLoading?'正在检查执行器连接。':'执行器尚未配置。':!configured?(hasSavedModels?'模型连接已保存，但尚未通过实际调用验证。':'尚未配置实际模型；不会使用模拟回复冒充生成。'):'所选资料会交给当前模型处理。原稿不变，收起面板不会删除对话。'}</div>
     </div>
   </div>;
 }

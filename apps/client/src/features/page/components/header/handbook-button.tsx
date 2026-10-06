@@ -21,7 +21,7 @@ function Entry({pageId,userId,readOnly}:{pageId:string;userId:string;readOnly:bo
  const data=status.data;if(!status.isError&&!data?.enabled)return null;
  return <>
   <Tooltip label="手册展示"><ActionIcon variant="subtle" color="dark" aria-label="手册展示" data-testid="handbook-trigger" onClick={()=>setOpened(true)}><IconBook2 size={20}/></ActionIcon></Tooltip>
-  <Modal opened={opened} onClose={()=>{setOpened(false);setSetup(false);}} title="手册展示" size="md" centered>
+  <Modal opened={opened} onClose={()=>{setOpened(false);setSetup(false);}} title={setup?"手册排版":"手册展示"} size="md" centered>
    <Stack gap="md">
     <Text size="sm">内容继续在原文档修改，展示沿用已关联的模板，不另存一份可编辑正文。</Text>
     {setup&&!readOnly?<HandbookSetup pageId={pageId} userId={userId} configured={!!data?.configured} defaultAuto={!!data?.autoUpdate} onApplied={()=>{setSetup(false);void client.invalidateQueries({queryKey:key});}} onCancel={()=>setSetup(false)}/>:status.isError?<Alert color="red">当前无法读取手册状态或访问权限已失效。<Button variant="subtle" onClick={()=>status.refetch()}>重新检查</Button></Alert>:!data?.configured?<Stack><Alert>这份文档尚未排版。选择版式后读取本篇原稿结构，核对无误再生成。</Alert>{!readOnly&&<Button data-testid="handbook-start-setup" onClick={()=>setSetup(true)}>首次排版</Button>}</Stack>:<>

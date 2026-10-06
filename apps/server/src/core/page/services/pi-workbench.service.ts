@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
 import { InjectKysely } from 'nestjs-kysely';
 import { sql } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { KyselyDB } from '../../../database/types/kysely.types';
 import { User } from '../../../database/types/entity.types';
 import { UserRepo } from '../../../database/repos/user/user.repo';
@@ -42,7 +43,7 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     catch { throw new ServiceUnavailableException('PI_WORKBENCH_UNREACHABLE'); }
     let body:any;try{body=await response.json();}catch{throw new ServiceUnavailableException('PI_WORKBENCH_RESPONSE_INVALID');}
     if(!response.ok){
-      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED','PI_MODEL_ADMIN_REQUIRED','PI_MODEL_SETTINGS_BUSY','PI_MODEL_SETTINGS_CHANGED','PI_MODEL_CONFIG_INVALID','PI_MODEL_KEY_REQUIRED']);
+      const safe=new Set(['PI_SESSION_NOT_FOUND','PI_COMMAND_OUTCOME_UNKNOWN','PI_CAPACITY_BUSY','PI_DIALOG_EXPIRED','PI_COMMAND_INVALID','PI_COMMAND_FIELDS_INVALID','PI_MODEL_NOT_CONFIGURED','PI_ARTIFACT_NOT_FOUND','PI_REQUEST_ID_REUSED','PI_MODEL_ADMIN_REQUIRED','PI_MODEL_SETTINGS_BUSY','PI_MODEL_SETTINGS_CHANGED','PI_MODEL_CONFIG_INVALID','PI_MODEL_KEY_REQUIRED','PI_PROVIDER_NOT_CONFIGURED','PI_PROVIDER_UNSUPPORTED','PI_PROVIDER_CHANGE_INVALID','PI_PROVIDER_PRESET_INVALID','PI_PROVIDER_ID_INVALID','PI_PROVIDER_REENTER_KEY','PI_PROVIDER_CLEAR_KEY_REQUIRED','PI_PROVIDER_ADDRESS_INVALID','PI_PROVIDER_ADDRESS_DENIED','PI_PROVIDER_DNS_FAILED','PI_PROVIDER_NETWORK_FAILED','PI_PROVIDER_AUTH_FAILED','PI_PROVIDER_ENDPOINT_NOT_FOUND','PI_PROVIDER_RATE_LIMITED','PI_PROVIDER_REDIRECT_DENIED','PI_PROVIDER_TIMEOUT','PI_PROVIDER_RESPONSE_INVALID','PI_PROVIDER_RESPONSE_TOO_LARGE','PI_PROVIDER_UPSTREAM_FAILED','PI_PROVIDER_DISCOVERY_UNSUPPORTED','PI_PROVIDER_DIAGNOSTIC_BUSY','PI_DISCOVERY_INCOMPLETE','PI_DISCOVERY_TOO_LARGE']);
       if(body.error==='PI_SESSION_NOT_FOUND')throw new NotFoundException('PI_SESSION_NOT_FOUND');
       throw new ServiceUnavailableException(safe.has(body.error)?body.error:'PI_WORKBENCH_OPERATION_FAILED');
     }
@@ -82,6 +83,37 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
   async saveModel(body:{model:object;revision:string;remove?:boolean},user:User) {
     const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
     return this.call('save-model',this.owner(current),{model:body.model,revision:body.revision,remove:body.remove===true});
+  }
+  private async providerAdmin(operation:string,parameters:Record<string,unknown>,user:User){
+    const current=await this.actor(user);if(!['owner','admin'].includes(current.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    const result=await this.call(operation,this.owner(current),parameters);
+    const after=await this.actor(user);if(!['owner','admin'].includes(after.role))throw new ForbiddenException('PI_MODEL_ADMIN_REQUIRED');
+    return result;
+  }
+  providerSettings(user:User){return this.providerAdmin('provider-settings',{},user);}
+  changeProvider(body:{change:object;revision:string},user:User){return this.providerAdmin('provider-change',{change:body.change,revision:body.revision},user);}
+  testProvider(body:{request:object},user:User){return this.providerAdmin('provider-test',{request:body.request},user);}
+  discoverProvider(body:{request:object},user:User){return this.providerAdmin('provider-discover',{request:body.request},user);}
+  async planLayout(body:{pageId:string;versionId:string;templates:{id:string;version:string;name:string;description:string}[];preferred?:{templateId?:string;templateVersion?:string;density?:string}},user:User){
+    if(!isId(body.pageId)||!isId(body.versionId)||!Array.isArray(body.templates)||!body.templates.length||body.templates.length>50)throw new BadRequestException('PI_LAYOUT_REQUEST_INVALID');
+    const templates=body.templates.map(item=>({id:String(item.id),version:String(item.version),name:String(item.name||item.id),description:String(item.description||'')}));for(const item of templates)if(!/^[a-z][a-z0-9-]{0,63}$/.test(item.id)||!/^\d+\.\d+\.\d+$/.test(item.version)||item.name.length>160||item.description.length>1000)throw new BadRequestException('PI_LAYOUT_REQUEST_INVALID');
+    const current=await this.actor(user);await this.history.displayAccess(body.pageId,current);const source=await this.history.displaySource(body.pageId,body.versionId,current),owner=this.owner(current);
+    const status=await this.call('status',owner);const model=Array.isArray(status?.models)?status.models[0]:null;if(!model?.provider||!model?.id)throw new ServiceUnavailableException('PI_MODEL_NOT_CONFIGURED');
+    const sessionId=randomUUID(),command=async(type:string,fields:Record<string,unknown>={})=>{const result=await this.call('command',owner,{sessionId,command:{type,id:randomUUID(),...fields}});if(result?.success!==true)throw new ServiceUnavailableException('PI_LAYOUT_GENERATION_FAILED');return result.data;};
+    try{
+      await this.call('create',owner,{sessionId,sources:[source]});await this.call('renew',owner,{sessionId});await command('set_model',{provider:model.provider,modelId:model.id});
+      const preference=body.preferred||{},message=['/skill:layout-designer 请为本会话唯一固定原稿完成排版判断。','允许版式（只能选择其一）：',JSON.stringify(templates),'允许阅读密度：comfortable、compact。',preference.templateId?('用户当前版式偏好：'+preference.templateId+'@'+String(preference.templateVersion||'')):'用户未指定版式偏好，由你根据全文判断。',preference.density?('用户当前阅读密度偏好：'+preference.density):'用户未指定阅读密度偏好。','必须读取完整原稿，并通过 propose_layout 工具提交；禁止在方案中复制或改写正文。'].join('\n');
+      await command('prompt',{message});
+      const deadline=Date.now()+70000;let artifact:any=null;
+      while(Date.now()<deadline){await this.call('renew',owner,{sessionId});const view=await this.call('view',owner,{sessionId,after:0});try{artifact=await this.call('artifact',owner,{sessionId,name:'layout-decision.json'});}catch(error){if(!(error instanceof ServiceUnavailableException&&error.message==='PI_ARTIFACT_NOT_FOUND'))throw error;}if(artifact&&!view?.busy&&!view?.state?.isStreaming)break;await new Promise(resolve=>setTimeout(resolve,350));}
+      if(!artifact?.data)throw new ServiceUnavailableException('PI_LAYOUT_GENERATION_FAILED');
+      let decision:any;try{decision=JSON.parse(Buffer.from(artifact.data,'base64').toString('utf8'));}catch{throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');}
+      const allowed=templates.some(item=>item.id===decision?.template?.id&&item.version===decision?.template?.version),blocks=source?.content?.content;
+      if(decision?.schema!=='sop.layout-decision/1'||decision?.source?.pageId!==body.pageId.toLowerCase()||decision?.source?.versionId!==body.versionId.toLowerCase()||!allowed||!['comfortable','compact'].includes(decision.density)||decision.modelAuthoredContent!==false||!Array.isArray(decision.groups)||!Array.isArray(blocks))throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');
+      let expected=0;for(const group of decision.groups){if(!group||!Array.isArray(group.body))throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');if(group.heading!==null){if(!Number.isInteger(group.heading)||group.heading!==expected||blocks[group.heading]?.type!=='heading')throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');expected++;}for(const index of group.body){if(!Number.isInteger(index)||index!==expected||!blocks[index])throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');expected++;}}if(expected!==blocks.length)throw new ServiceUnavailableException('PI_LAYOUT_RESULT_INVALID');
+      await this.actor(user);await this.history.displaySource(body.pageId,body.versionId,current);
+      return {...decision,planner:'pi-layout-designer/1',model:{provider:model.provider,id:model.id,label:model.label||model.id}};
+    }finally{await this.call('destroy',owner,{sessionId}).catch(async()=>{await this.call('revoke',owner,{sessionId}).catch(()=>{});});}
   }
   async list(user:User) {
     const current=await this.actor(user);const list:Conversation[]=await this.call('list',this.owner(current)),items=[];
