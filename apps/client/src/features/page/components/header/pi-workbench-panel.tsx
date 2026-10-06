@@ -175,7 +175,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,spaceId,title}:{user
   const pickerItems=((debounced.trim()?search.data:recent.data)||[]).filter(item=>!sourceIds.has(item.id)).slice(0,12);
   const historyItems=[...(handbookHistory.data?.items||[])].sort((a,b)=>Number(b.current)-Number(a.current)||new Date(b.completedAt||0).getTime()-new Date(a.completedAt||0).getTime()),historyPreview=historyItems.slice(0,3);
   const templateMap=new Map((layoutOptions.data||[]).map(item=>[`${item.id}@${item.version}`,item.name]));
-  const templateName=(item:SopHistoryItem)=>item.template?templateMap.get(`${item.template.id}@${item.template.version}`)||item.template.id:'标准版式';
+  const legacyTemplateNames=new Map([['editorial-guide@2.1.0','专用章节版']]);
+  const templateName=(item:SopHistoryItem)=>item.template?templateMap.get(`${item.template.id}@${item.template.version}`)||legacyTemplateNames.get(`${item.template.id}@${item.template.version}`)||item.template.id:'标准版式';
   const formatHistoryTime=(value?:string|null)=>{if(!value)return '时间未知';const date=new Date(value),now=new Date(),sameDay=date.toDateString()===now.toDateString();const yesterday=new Date(now);yesterday.setDate(now.getDate()-1);const hm=date.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false});if(sameDay)return `今天 ${hm}`;if(date.toDateString()===yesterday.toDateString())return `昨天 ${hm}`;return `${date.getMonth()+1}月${date.getDate()}日 ${hm}`;};
   const historyStatus=(item:SopHistoryItem)=>item.current?'当前':'历史';
   return <div className={classes.root} data-testid="pi-workbench-panel">
