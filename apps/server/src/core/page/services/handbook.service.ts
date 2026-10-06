@@ -30,6 +30,7 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
   private readonly logger=new Logger(HandbookService.name);
   private timer:ReturnType<typeof setTimeout>;private running:Promise<void>|null=null;private stopped=false;
   private readonly layoutProposals=new Map<string,{expiresAt:number;workspaceId:string;actorId:string;pageId:string;spaceId:string;versionId:string;sourceHash:string;assetStamp:string;rendererHash:string;targetToken:string;binding:any;bindingHash:string;summary:any}>();
+  private readonly agentGenerations=new Map<string,{expiresAt:number;promise:Promise<any>}>();
   private readonly runtime=path.resolve(process.cwd(),'.sop-display-runtime');
   constructor(@InjectKysely() private readonly db:KyselyDB,private readonly store:HandbookJobStore,
     private readonly history:VersionHistoryService,private readonly users:UserRepo,private readonly pages:PageRepo,
@@ -104,6 +105,36 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
     this.layoutProposals.delete(proposalHash);
     // Configuration is durable even if a new source edit postpones the subsequent job.
     return this.refresh(pageId,user);
+  }
+  async generateFromAgent(sessionId:string,toolCallId:string,user:User){
+    const key=[user.workspaceId,user.id,sessionId,toolCallId].join(':');const now=Date.now();
+    for(const [id,value] of this.agentGenerations)if(value.expiresAt<=now)this.agentGenerations.delete(id);
+    const existing=this.agentGenerations.get(key);if(existing)return existing.promise;
+    const promise=this.generateFromAgentOnce(sessionId,toolCallId,user);this.agentGenerations.set(key,{expiresAt:now+10*60*1000,promise});
+    try{return await promise;}catch(error){this.agentGenerations.delete(key);throw error;}
+  }
+  private async generateFromAgentOnce(sessionId:string,toolCallId:string,user:User){
+    const request=await this.workbench.verifiedSopRequest({sessionId,toolCallId},user),pageId=request.source.pageId;
+    const access=await this.access(pageId,user,true),versions=await this.history.list(pageId,access.user,undefined,{summaries:false}),latest=versions.items[0];
+    if(!latest||latest.status!=='synced'||latest.id!==request.source.versionId)throw new ConflictException('LAYOUT_SOURCE_CHANGED');
+    const current=await this.status(pageId,user);
+    if(current.configured&&current.current?.versionId===request.source.versionId&&!current.outdated&&current.current?.url){
+      return {schema:'sop.agent-generation/1',state:'succeeded',reused:true,pageId,sourceTitle:request.source.title,revision:current.current.revision,template:current.template,url:current.current.url};
+    }
+    const options=await this.layoutOptions(pageId,user);if(!Array.isArray(options)||!options.length)throw new ServiceUnavailableException('LAYOUT_CATALOG_UNAVAILABLE');
+    const preferred=options.find((item:any)=>item.id==='chapter-reader')||options[0];
+    const preview=await this.previewLayout(pageId,{id:preferred.id,version:preferred.version,density:'comfortable'},user);
+    if(preview.versionId!==request.source.versionId)throw new ConflictException('LAYOUT_SOURCE_CHANGED');
+    let status=await this.applyLayout(pageId,{id:preview.recommendation?.templateId||preferred.id,version:preview.recommendation?.templateVersion||preferred.version,density:preview.recommendation?.density||'comfortable'},preview.proposalHash,request.autoUpdate,user);
+    const deadline=Date.now()+90000;
+    while(Date.now()<deadline){
+      if(status.current?.versionId===request.source.versionId&&!status.outdated&&status.current?.url){
+        return {schema:'sop.agent-generation/1',state:'succeeded',reused:false,pageId,sourceTitle:request.source.title,revision:status.current.revision,template:status.template,url:status.current.url,model:preview.summary?.model||null};
+      }
+      if(status.state==='failed')throw new ServiceUnavailableException(status.errorCode||'HANDBOOK_GENERATION_FAILED');
+      await new Promise(resolve=>setTimeout(resolve,750));status=await this.status(pageId,user);
+    }
+    throw new ServiceUnavailableException('HANDBOOK_GENERATION_TIMEOUT');
   }
   async configure(pageId:string,binding:any,autoUpdate:boolean,user:User){
     const c=await this.configuration();if(!c)throw new ServiceUnavailableException('HANDBOOK_DISABLED');

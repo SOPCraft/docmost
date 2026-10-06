@@ -16,6 +16,7 @@ export class HandbookLayoutDto extends HandbookPageDto {
   @IsIn(['comfortable','compact']) density:string;
 }
 export class HandbookLayoutApplyDto extends HandbookLayoutDto { @IsString() @Matches(/^[a-f0-9]{64}$/) proposalHash:string; @IsBoolean() autoUpdate:boolean; }
+export class HandbookAgentGenerateDto { @IsUUID() sessionId:string; @IsString() @Matches(/^[a-zA-Z0-9_.:-]{1,200}$/) toolCallId:string; }
 @UseGuards(JwtAuthGuard)
 @Controller('pages/handbook')
 export class HandbookController {
@@ -28,6 +29,8 @@ export class HandbookController {
   preview(@Body() dto:HandbookLayoutDto,@AuthUser() user:User){return this.handbooks.previewLayout(dto.pageId,{id:dto.templateId,version:dto.templateVersion,density:dto.density},user);}
   @Post('layout-apply') @HttpCode(HttpStatus.OK) @OAuthScope('write')
   apply(@Body() dto:HandbookLayoutApplyDto,@AuthUser() user:User){return this.handbooks.applyLayout(dto.pageId,{id:dto.templateId,version:dto.templateVersion,density:dto.density},dto.proposalHash,dto.autoUpdate,user);}
+  @Post('agent-generate') @HttpCode(HttpStatus.OK) @OAuthScope('write')
+  agentGenerate(@Body() dto:HandbookAgentGenerateDto,@AuthUser() user:User){return this.handbooks.generateFromAgent(dto.sessionId,dto.toolCallId,user);}
   @Post('configure') @HttpCode(HttpStatus.OK) @OAuthScope('write')
   configure(@Body() dto:HandbookConfigurationDto,@AuthUser() user:User){return this.handbooks.configure(dto.pageId,dto.binding,dto.autoUpdate,user);}
   @Post('refresh') @HttpCode(HttpStatus.OK) @OAuthScope('write')

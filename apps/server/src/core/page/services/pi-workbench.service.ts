@@ -8,7 +8,7 @@ import { UserRepo } from '../../../database/repos/user/user.repo';
 import { VersionHistoryService } from './version-history.service';
 
 type Owner = { actorId:string; workspaceId:string };
-type Source = { pageId:string; versionId:string; title:string; revision?:number };
+type Source = { pageId:string; versionId:string; title:string; revision?:number; key?:string; sha256?:string };
 type Conversation = { id:string; owner:Owner; sources:Source[]; title:string; [key:string]:any };
 const isId = (id:unknown):id is string => typeof id==='string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(id);
 
@@ -151,6 +151,20 @@ export class PiWorkbenchService implements OnApplicationBootstrap, OnApplication
     return result;
   }
   view(body:{sessionId:string;after:number},user:User){return this.protectedCall('view',body,user);}
+  async verifiedSopRequest(body:{sessionId:string;toolCallId:string},user:User){
+    if(!body.toolCallId||body.toolCallId.length>200||!/^[a-zA-Z0-9_.:-]+$/.test(body.toolCallId))throw new BadRequestException('PI_TOOL_REQUEST_INVALID');
+    const {current,owner,meta}=await this.access(body.sessionId,user),view=await this.call('view',owner,{sessionId:body.sessionId,after:0});
+    const messages=Array.isArray(view?.messages)?view.messages:[];let tool:any=null,result:any=null;
+    for(const message of messages){
+      if(message?.role==='assistant'&&Array.isArray(message.content))for(const part of message.content)if(part?.type==='toolCall'&&part.id===body.toolCallId&&part.name==='generate_sop')tool=part;
+      if(message?.role==='toolResult'&&message.toolCallId===body.toolCallId)result=message;
+    }
+    if(!tool||!result||result.isError===true||!tool.arguments||typeof tool.arguments!=='object'||Array.isArray(tool.arguments))throw new BadRequestException('PI_TOOL_REQUEST_INVALID');
+    const sourceKey=String(tool.arguments.sourceKey||''),source=meta.sources.find(item=>item.key===sourceKey);
+    if(!source||!isId(source.pageId)||!isId(source.versionId))throw new BadRequestException('PI_TOOL_SOURCE_INVALID');
+    await this.verifySources(meta,current);await this.history.displaySource(source.pageId,source.versionId,current);await this.actor(user);
+    return {sessionId:body.sessionId,toolCallId:body.toolCallId,source:{pageId:source.pageId,versionId:source.versionId,title:source.title,revision:source.revision,key:sourceKey},autoUpdate:tool.arguments.autoUpdate!==false};
+  }
   command(body:{sessionId:string;command:object},user:User){return this.protectedCall('command',body,user);}
   respond(body:{sessionId:string;response:object},user:User){return this.protectedCall('respond',body,user);}
   artifacts(body:{sessionId:string},user:User){return this.protectedCall('artifacts',body,user);}
