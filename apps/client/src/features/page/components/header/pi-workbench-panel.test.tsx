@@ -7,9 +7,9 @@ import { PiWorkbenchPanel } from './pi-workbench-panel';
 import { PiTranscript } from './pi-workbench-messages';
 import { applyPiRecord,emptyPiState } from './pi-workbench-state';
 import { selectedConversationKey } from './pi-workbench-api';
-const mocks=vi.hoisted(()=>({post:vi.fn(),aside:{isAsideOpen:true,tab:'pi'},views:{} as Record<string,any>,configured:true,savedOnly:false,canManageModels:true}));
+const mocks=vi.hoisted(()=>({post:vi.fn(),aside:{isAsideOpen:true,tab:'pi'},views:{} as Record<string,any>,configured:true,savedOnly:false,canManageModels:true,history:[{jobId:'h1',revision:4,versionId:'v4',template:{id:'chapter-reader',version:'1.0.0'},current:true,completedAt:'2026-10-06T08:01:00+08:00',url:'/sop/1'},{jobId:'h2',revision:4,versionId:'v4',template:{id:'editorial-guide',version:'2.1.0'},current:false,completedAt:'2026-10-06T07:06:00+08:00',url:'/sop/2'},{jobId:'h3',revision:4,versionId:'v4',template:{id:'editorial-guide',version:'2.1.0'},current:false,completedAt:'2026-10-04T19:40:00+08:00',url:'/sop/3'},{jobId:'h4',revision:4,versionId:'v4',template:{id:'editorial-guide',version:'2.1.0'},current:false,completedAt:'2026-10-04T19:35:00+08:00',url:'/sop/4'}]}));
 vi.mock('@/lib/api-client',()=>({default:{post:mocks.post}}));
-vi.mock('jotai',()=>({useAtomValue:()=>mocks.aside}));
+vi.mock('jotai',()=>({useAtomValue:()=>mocks.aside,useSetAtom:()=>((value:any)=>{mocks.aside=typeof value==='function'?value(mocks.aside):value;})}));
 vi.mock('@/features/user/atoms/current-user-atom',()=>({currentUserAtom:{}}));
 vi.mock('@/components/layouts/global/hooks/atoms/sidebar-atom',()=>({asideStateAtom:{}}));
 vi.mock('@/features/page/queries/page-query',()=>({usePageQuery:()=>({data:null})}));
@@ -32,6 +32,8 @@ beforeEach(()=>{
     if(route.endsWith('/command'))return {data:{success:true,data:{accepted:true}}};
     if(route.endsWith('/respond')){mocks.views[body.sessionId].dialogs=[];return {data:{accepted:true}};}
     if(route.endsWith('/handbook/agent-generate'))return {data:{state:'succeeded',url:'/api/pages/handbook/view/page/job/index.html',revision:4,template:{id:'chapter-reader',version:'1.0.0'},reused:false}};
+    if(route.endsWith('/handbook/history'))return {data:{enabled:true,items:mocks.history}};
+    if(route.endsWith('/handbook/layout-options'))return {data:[{id:'chapter-reader',version:'1.0.0',name:'章节工作本'}]};
     return {data:{items:[]}};
   });
 });
@@ -58,6 +60,7 @@ describe('native Pi workbench panel',()=>{
   });
 
   it('renders inside the host panel without creating a drawer overlay',async()=>{await ready();expect(screen.getByTestId('pi-workbench-panel')).toBeTruthy();expect(document.querySelector('.mantine-Drawer-overlay')).toBeNull();expect(screen.queryByText('整理选中资料')).toBeNull();});
+  it('switches the native aside to SOP history instead of opening a nested drawer',async()=>{await ready();const more=await screen.findByTestId('sop-history-more');fireEvent.click(more);expect(mocks.aside).toEqual({tab:'sopHistory',isAsideOpen:true});expect(document.querySelector('.mantine-Drawer-overlay')).toBeNull();});
   it('sends multiple turns into the same persisted conversation',async()=>{await ready();const input=screen.getByRole('textbox',{name:'发送给智能体'});for(const text of ['第一轮问题','继续修改第二步']){fireEvent.change(input,{target:{value:text}});fireEvent.click(screen.getByRole('button',{name:'发送消息'}));await waitFor(()=>expect((input as HTMLTextAreaElement).value).toBe(''));}expect(commands().map(body=>body.sessionId)).toEqual([first,first]);expect(commands().map(body=>body.command.message)).toEqual(['第一轮问题','继续修改第二步']);});
   it('sends the standard SOP shortcut as the exact user message instead of opening another flow',async()=>{await ready();fireEvent.click(screen.getByRole('button',{name:'把这篇文档生成标准 SOP 手册'}));await waitFor(()=>expect(commands()[0]?.command.message).toBe('把这篇文档生成标准 SOP 手册'));expect(commands()[0]?.command.type).toBe('prompt');});
   it('turns a verified generate_sop tool call into a handbook result card',async()=>{mocks.views[first].messages=[{role:'assistant',content:[{type:'toolCall',id:'sop-call-1',name:'generate_sop',arguments:{sourceKey:'source',autoUpdate:true}}]},{role:'toolResult',toolCallId:'sop-call-1',isError:false,content:[{type:'text',text:'已受理'}]}];setup();expect(await screen.findByText('标准 SOP 手册已生成')).toBeTruthy();expect((await screen.findByRole('link',{name:'查看 SOP'})).getAttribute('href')).toBe('/api/pages/handbook/view/page/job/index.html');await waitFor(()=>expect(mocks.post.mock.calls.some(([route,body])=>route.endsWith('/handbook/agent-generate')&&body.toolCallId==='sop-call-1'&&body.sessionId===first)).toBe(true));});
