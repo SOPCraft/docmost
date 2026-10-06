@@ -1,44 +1,42 @@
 import { useState } from "react";
-import { ActionIcon, Alert, Button, Group, Modal, Stack, Switch, Text, Tooltip } from "@mantine/core";
-import { IconBook2 } from "@tabler/icons-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAtomValue } from "jotai";
+import { ActionIcon, Alert, Button, Modal, Text, Tooltip } from "@mantine/core";
+import { IconBook2, IconExternalLink, IconSparkles } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
+import { useAtomValue, useSetAtom } from "jotai";
+import { asideStateAtom } from "@/components/layouts/global/hooks/atoms/sidebar-atom";
 import { currentUserAtom } from "@/features/user/atoms/current-user-atom";
 import api from "@/lib/api-client";
-import HandbookSetup from "./handbook-setup";
-type Status={enabled:boolean;configured:boolean;autoUpdate?:boolean;state?:string;attempts?:number;errorCode?:string|null;outdated?:boolean;assetsAccessible?:boolean;current?:{url:string;revision:number;pageId:string;jobId:string}|null;template?:{id:string;version:string}};
-const labels:Record<string,string>={idle:"尚未生成",queued:"等待更新",running:"正在读取与生成",succeeded:"已生成",failed:"更新失败",superseded:"已由新任务替代"};
-const errors:Record<string,string>={LAYOUT_REQUIRED:"章节或表格结构已改变，需要重新排版。",SOURCE_ACCESS_REVOKED:"原稿或素材权限已失效，自动更新已停止。",SOURCE_CHANGED:"生成期间原稿发生变化，旧任务没有覆盖新结果。",SOURCE_TEMPORARILY_UNAVAILABLE:"来源暂不可用，任务会按限定次数重试。",LEASE_EXHAUSTED:"任务多次中断，请手动重试。"};
-export default function HandbookButton({pageId,readOnly=false}:{pageId:string;readOnly?:boolean}){
+import classes from "./handbook-button.module.css";
+
+type Status={enabled:boolean;configured:boolean;autoUpdate?:boolean;state?:string;errorCode?:string|null;outdated?:boolean;assetsAccessible?:boolean;current?:{url:string;revision:number;versionId:string;pageId:string;jobId:string}|null;template?:{id:string;version:string}};
+const templateNames:Record<string,string>={"chapter-reader":"章节工作本","continuous-reader":"连续阅读"};
+
+export default function HandbookButton({pageId}:{pageId:string;readOnly?:boolean}){
  const userId=useAtomValue(currentUserAtom)?.user?.id;
- return userId?<Entry key={`${userId}:${pageId}`} pageId={pageId} userId={userId} readOnly={readOnly}/>:null;
+ return userId?<Entry key={`${userId}:${pageId}`} pageId={pageId} userId={userId}/>:null;
 }
-function Entry({pageId,userId,readOnly}:{pageId:string;userId:string;readOnly:boolean}){
- const [opened,setOpened]=useState(false),[setup,setSetup]=useState(false),client=useQueryClient(),key=["sop-handbook",userId,pageId];
- const status=useQuery({queryKey:key,queryFn:async({signal})=>(await api.post<Status>("/pages/handbook/status",{pageId},{signal})).data,refetchInterval:opened?5000:false,retry:false,gcTime:0});
- const action=useMutation({mutationFn:async(payload:{route:string;enabled?:boolean})=>(await api.post<Status>(`/pages/handbook/${payload.route}`,{pageId,...(payload.enabled===undefined?{}:{enabled:payload.enabled})})).data,
-  onSuccess:data=>client.setQueryData(key,data),onError:()=>{void client.invalidateQueries({queryKey:key});}});
- const data=status.data;if(!status.isError&&!data?.enabled)return null;
+
+function Entry({pageId,userId}:{pageId:string;userId:string}){
+ const [opened,setOpened]=useState(false),setAside=useSetAtom(asideStateAtom),key=["sop-handbook",userId,pageId];
+ const status=useQuery({queryKey:key,queryFn:async({signal})=>(await api.post<Status>("/pages/handbook/status",{pageId},{signal})).data,refetchInterval:opened?3000:false,retry:false,gcTime:0});
+ const data=status.data;
+ if(!status.isError&&!data?.enabled)return null;
+ const openAgent=()=>{setOpened(false);setAside({tab:"pi",isAsideOpen:true});};
+ const running=["queued","running"].includes(data?.state||"");
+ const template=data?.template?.id?templateNames[data.template.id]||data.template.id:"标准版式";
  return <>
-  <Tooltip label="手册展示"><ActionIcon variant="subtle" color="dark" aria-label="手册展示" data-testid="handbook-trigger" onClick={()=>setOpened(true)}><IconBook2 size={20}/></ActionIcon></Tooltip>
-  <Modal opened={opened} onClose={()=>{setOpened(false);setSetup(false);}} title={setup?"手册排版":"手册展示"} size="md" centered>
-   <Stack gap="md">
-    <Text size="sm">内容继续在原文档修改，展示沿用已关联的模板，不另存一份可编辑正文。</Text>
-    {setup&&!readOnly?<HandbookSetup pageId={pageId} userId={userId} configured={!!data?.configured} defaultAuto={!!data?.autoUpdate} onApplied={()=>{setSetup(false);void client.invalidateQueries({queryKey:key});}} onCancel={()=>setSetup(false)}/>:status.isError?<Alert color="red">当前无法读取手册状态或访问权限已失效。<Button variant="subtle" onClick={()=>status.refetch()}>重新检查</Button></Alert>:!data?.configured?<Stack><Alert>这份文档尚未排版。选择版式后读取本篇原稿结构，核对无误再生成。</Alert>{!readOnly&&<Button data-testid="handbook-start-setup" onClick={()=>setSetup(true)}>首次排版</Button>}</Stack>:<>
-     <Text role="status" data-testid="handbook-task-state">{labels[data.state||"idle"]||"状态待核验"}{data.attempts?` · 已尝试${data.attempts}次`:""}</Text>
-     {data.errorCode&&<Alert color="orange">{errors[data.errorCode]||"更新未完成。旧结果未被失败任务覆盖，请检查后重试。"}</Alert>}
-     {data.outdated&&<Alert color="orange">原稿或配置已更新。保留的旧版不作为最新执行依据，请回原稿核对。</Alert>}
-     {data.assetsAccessible===false&&<Alert color="red">原素材访问检查失败，已停止提供阅读入口。</Alert>}
-     <Group>
-      {!readOnly&&<Button data-testid="handbook-refresh" loading={action.isPending} onClick={()=>action.mutate({route:"refresh"})}>生成或更新手册</Button>}
-      {data.current&&!status.isError&&<Button component="a" href={data.current.url} target="_blank" rel="noopener noreferrer" variant="light" data-testid="handbook-open">查看第{data.current.revision}版</Button>}
-     </Group>
-     {!readOnly&&<Button variant="subtle" data-testid="handbook-change-layout" disabled={action.isPending} onClick={()=>setSetup(true)}>重新排版或更换版式</Button>}
-     {!readOnly&&<Switch label="原稿保存后自动更新这份手册" description="仅对已关联手册生效；读取沿用当前操作者权限，撤权后停止。" checked={!!data.autoUpdate} disabled={action.isPending} onChange={e=>action.mutate({route:"automatic",enabled:e.currentTarget.checked})}/>}
-     <Text size="xs" c="dimmed">{data.current?`当前结果：${data.current.pageId}`:"尚无完整生成结果"}。阅读中的页面只提示新版，不强制跳转或中断视频。</Text>
-    </>}
-    {action.isError&&<Alert color="red">操作未完成，请检查编辑权限、原稿版本是否已保存及连接状态；本次没有显示为成功。</Alert>}
-   </Stack>
+  <Tooltip label="标准 SOP 手册"><ActionIcon variant="subtle" color="dark" aria-label="标准 SOP 手册" data-testid="handbook-trigger" onClick={()=>setOpened(true)}><IconBook2 size={20}/></ActionIcon></Tooltip>
+  <Modal opened={opened} onClose={()=>setOpened(false)} title="标准 SOP 手册" size="sm" centered classNames={{content:classes.modal,body:classes.body}}>
+   <div className={classes.shell}>
+    <div className={classes.hero}><div className={classes.icon}><IconBook2 size={20}/></div><div><div className={classes.title}>这篇文档的 SOP 手册</div><div className={classes.subtitle}>生成交给 Pi 智能体完成；这里仅查看当前结果和状态。</div></div></div>
+    {status.isError?<Alert color="red">当前无法读取 SOP 状态。请检查文档权限后重试。</Alert>:data?.assetsAccessible===false?<Alert color="red">当前 SOP 引用的素材已不可访问，已停止提供阅读入口。</Alert>:data?.current?<div className={classes.card}>
+      <div className={classes.cardHead}><div><div className={classes.version}>第 {data.current.revision} 版标准 SOP</div><div className={classes.meta}>{template} · {data.autoUpdate?"原稿更新后自动生成新版":"按需生成"}</div></div><span className={classes.status} data-state={data.outdated?"outdated":"current"}>{data.outdated?"原稿有更新":"当前可用"}</span></div>
+      {data.errorCode&&<Alert color="orange" mb="sm">最近一次更新没有完成，当前完整版本仍然保留。</Alert>}
+      {data.outdated&&<Text size="xs" c="dimmed">原稿已经有新版本。请在右侧 Pi 智能体中再次发送“把这篇文档生成标准 SOP 手册”。</Text>}
+      <div className={classes.actions}><Button className={classes.open} component="a" href={data.current.url} target="_blank" rel="noopener noreferrer" rightSection={<IconExternalLink size={14}/>} data-testid="handbook-open">查看 SOP</Button><Button variant="default" leftSection={<IconSparkles size={14}/>} onClick={openAgent}>打开 Pi 智能体</Button></div>
+     </div>:<div className={classes.empty}><div className={classes.emptyTitle}>{running?"正在生成 SOP":"还没有生成 SOP"}</div><div className={classes.emptyText}>{running?"Pi 智能体正在处理当前生成请求，可以回到右侧对话查看进度。":"打开右侧 Pi 智能体，点击底部“把这篇文档生成标准 SOP 手册”，或直接输入同样的话。"}</div><Button variant="light" leftSection={<IconSparkles size={14}/>} onClick={openAgent}>{running?"查看智能体进度":"打开 Pi 智能体"}</Button></div>}
+    <div className={classes.note}>原文仍在当前文档中编辑；SOP 是这个固定版本的展示结果，不另存一份可编辑正文。</div>
+   </div>
   </Modal>
  </>;
 }

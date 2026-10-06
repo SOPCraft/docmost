@@ -30,3 +30,21 @@ describe('first-layout preview and explicit confirmation',()=>{
  it('proposal ownership cannot cross actors or workspaces',async()=>{const f=fixture();await preview(f);await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',true,{...f.user,id:randomUUID()})).rejects.toThrow(ConflictException);expect(f.store.configure).not.toHaveBeenCalled();});
  it('a newer preview for the same actor and page invalidates the older proposal instead of accumulating them',async()=>{const f=fixture(),second={...f.prepared,proposalHash:'proposal-new'};(f.service as any).prepareLayout.mockResolvedValueOnce(f.prepared).mockResolvedValueOnce(second);await f.service.previewLayout(f.pageId,f.selection,f.user);await f.service.previewLayout(f.pageId,f.selection,f.user);expect((f.service as any).layoutProposals.size).toBe(1);await expect(f.service.applyLayout(f.pageId,f.selection,'proposal-hash',true,f.user)).rejects.toThrow(ConflictException);});
 });
+
+
+describe('Pi-agent SOP generation bridge',()=>{
+ function agentFixture(){
+  const pageId=randomUUID(),versionId=randomUUID(),spaceId=randomUUID(),user={id:randomUUID(),workspaceId:randomUUID()} as any;
+  const workbench={verifiedSopRequest:jest.fn(async()=>({sessionId:randomUUID(),toolCallId:'sop-call-1',source:{pageId,versionId,title:'智能体固定原稿',revision:7,key:'fixed-source'},autoUpdate:true}))};
+  const history={list:jest.fn(async()=>({items:[{id:versionId,status:'synced'}]}))};
+  const service=new HandbookService({} as any,{} as any,history as any,{} as any,{} as any,{} as any,{} as any,{} as any,{} as any,workbench as any);
+  jest.spyOn(service as any,'access').mockResolvedValue({user,page:{id:pageId,spaceId,slugId:'fixed'}});
+  jest.spyOn(service,'layoutOptions').mockResolvedValue([{id:'chapter-reader',version:'1.0.0',name:'章节工作本',description:'章节'}] as any);
+  const preview=jest.spyOn(service,'previewLayout').mockResolvedValue({proposalHash:'p'.repeat(64),versionId,recommendation:{templateId:'chapter-reader',templateVersion:'1.0.0',density:'comfortable'},summary:{model:{provider:'fixture',id:'model'}}} as any);
+  const apply=jest.spyOn(service,'applyLayout').mockResolvedValue({state:'succeeded',configured:true,outdated:false,template:{id:'chapter-reader',version:'1.0.0'},current:{versionId,revision:7,url:'/api/pages/handbook/view/page/job/index.html'}} as any);
+  return{service,workbench,history,preview,apply,pageId,versionId,user};
+ }
+ it('lets a verified Pi tool call run the layout pipeline and returns the finished SOP link',async()=>{const f=agentFixture();jest.spyOn(f.service,'status').mockResolvedValue({configured:false} as any);const result=await f.service.generateFromAgent(randomUUID(),'sop-call-1',f.user);expect(f.workbench.verifiedSopRequest).toHaveBeenCalledTimes(1);expect(f.preview).toHaveBeenCalledTimes(1);expect(f.apply).toHaveBeenCalledTimes(1);expect(result).toMatchObject({schema:'sop.agent-generation/1',state:'succeeded',revision:7,url:'/api/pages/handbook/view/page/job/index.html'});});
+ it('refuses to apply a layout preview if the source changed after the Pi tool request',async()=>{const f=agentFixture();jest.spyOn(f.service,'status').mockResolvedValue({configured:false} as any);f.preview.mockResolvedValueOnce({proposalHash:'p'.repeat(64),versionId:randomUUID(),recommendation:{templateId:'chapter-reader',templateVersion:'1.0.0',density:'comfortable'},summary:{}} as any);await expect(f.service.generateFromAgent(randomUUID(),'sop-call-1',f.user)).rejects.toThrow('LAYOUT_SOURCE_CHANGED');expect(f.apply).not.toHaveBeenCalled();});
+ it('reuses an already-current SOP for the same fixed source instead of regenerating it',async()=>{const f=agentFixture();jest.spyOn(f.service,'status').mockResolvedValue({configured:true,outdated:false,template:{id:'chapter-reader',version:'1.0.0'},current:{versionId:f.versionId,revision:7,url:'/ready'}} as any);const result=await f.service.generateFromAgent(randomUUID(),'sop-call-1',f.user);expect(result).toMatchObject({state:'succeeded',reused:true,url:'/ready'});expect(f.preview).not.toHaveBeenCalled();expect(f.apply).not.toHaveBeenCalled();});
+});

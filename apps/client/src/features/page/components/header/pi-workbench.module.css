@@ -70,3 +70,20 @@
 .setupModel:hover { background:var(--mantine-color-default-hover); color:var(--mantine-color-text); }
 .hint { font-size:10px; padding:9px 2px 0; }
 @media(max-height:680px) { .empty { padding-top:4px; gap:9px; } .suggestion { padding:9px 11px; } .emptyIcon { width:34px; height:34px; } .emptyTitle { font-size:16px; } }
+
+.quickPrompts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; padding:0 0 8px; }
+.quickPrompt { width:100%; min-width:0; display:inline-flex; align-items:center; justify-content:flex-start; gap:6px; border:1px solid var(--mantine-color-default-border); border-radius:9px; padding:7px 9px; background:var(--mantine-color-body); color:var(--mantine-color-text); font:inherit; font-size:11px; line-height:1.35; cursor:pointer; }
+.quickPrompt:first-child { grid-column:1 / -1; border-color:var(--mantine-primary-color-light-hover); background:var(--mantine-primary-color-light); color:var(--mantine-primary-color-light-color); }
+.quickPrompt:hover:not(:disabled) { background:var(--mantine-color-default-hover); }
+.quickPrompt:first-child:hover:not(:disabled) { background:var(--mantine-primary-color-light-hover); }
+.quickPrompt:disabled { opacity:.45; cursor:not-allowed; }
+.quickPrompt span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sopResult { margin:10px 0 4px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 14px; border:1px solid var(--mantine-color-default-border); border-radius:12px; background:var(--mantine-color-body); }
+.sopResult[data-state="pending"] { background:var(--mantine-color-default-hover); }
+.sopResult[data-state="succeeded"] { border-color:var(--mantine-color-green-light-hover); background:var(--mantine-color-green-light); }
+.sopResult[data-state="failed"] { border-color:var(--mantine-color-red-light-hover); background:var(--mantine-color-red-light); }
+.sopResultTitle { font-size:13px; font-weight:650; line-height:1.4; }
+.sopResultText { margin-top:3px; font-size:11px; color:var(--mantine-color-dimmed); line-height:1.55; }
+.sopOpen { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; padding:7px 10px; border-radius:8px; background:var(--mantine-primary-color-filled); color:var(--mantine-color-white); text-decoration:none; font-size:11px; font-weight:600; }
+.sopOpen:hover { background:var(--mantine-primary-color-filled-hover); }
+@media(max-width:520px){.quickPrompts{grid-template-columns:1fr}.quickPrompt:first-child{grid-column:auto}.sopResult{align-items:flex-start;flex-direction:column}.sopOpen{width:100%}}

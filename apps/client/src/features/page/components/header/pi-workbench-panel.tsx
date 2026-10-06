@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActionIcon, Button, Group, Loader, Menu, Modal, Select, Stack, Text, Textarea, TextInput, Tooltip } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconPaperclip, IconRefresh, IconX, IconSettings2, IconRoute, IconChecklist, IconWand, IconArrowUpRight, IconFileText } from '@tabler/icons-react';
+import { IconArrowUp, IconPlus, IconSquare, IconSparkles, IconPaperclip, IconRefresh, IconX, IconSettings2, IconRoute, IconChecklist, IconBook2, IconFileText } from '@tabler/icons-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { useParams } from 'react-router-dom';
@@ -20,6 +20,7 @@ import classes from './pi-workbench.module.css';
 
 type Candidate={id:string;title:string};
 type ImageInput={type:'image';mimeType:string;data:string};
+type SopGenerationResult={state:'pending'|'succeeded'|'failed';url?:string;revision?:number;template?:{id:string;version:string};reused?:boolean;message?:string};
 const labels:Record<string,string>={get_state:'运行状态',get_messages:'完整消息',get_entries:'历史条目',get_tree:'树形历史',get_session_stats:'用量统计',get_commands:'技能与扩展命令',get_available_models:'可用模型',get_available_thinking_levels:'思考强度',get_fork_messages:'分支起点',get_last_assistant_text:'最后一次回复',abort:'停止本轮',clear_queue:'清空追加队列',new_session:'新建原生会话',clone:'克隆当前分支',cycle_model:'切换下个模型',cycle_thinking_level:'切换思考强度',set_model:'选择模型',set_thinking_level:'设置思考强度',set_steering_mode:'纠正队列模式',set_follow_up_mode:'后续队列模式',compact:'整理长对话上下文',set_auto_compaction:'自动压缩设置',set_auto_retry:'自动重试设置',abort_retry:'停止重试',bash:'隔离终端命令',abort_bash:'停止终端命令',export_html:'导出对话网页',switch_session:'恢复原生会话',fork:'从历史节点分支',set_session_name:'重命名会话',prompt:'发送消息',steer:'执行中纠正',follow_up:'追加后续任务'};
 
 export default function PiWorkbenchSidebar(){
@@ -35,8 +36,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const [query,setQuery]=useState(''),[debounced]=useDebouncedValue(query,300),[selected,setSelected]=useState<Candidate[]>([{id:pageId,title}]);
   const [mode,setMode]=useState('followUp'),[image,setImage]=useState<ImageInput|null>(null),[advanced,setAdvanced]=useState(false),[modelSettings,setModelSettings]=useState(false),[pendingModel,setPendingModel]=useState('');
   const [operation,setOperation]=useState('get_state'),[parameters,setParameters]=useState('{}'),[inspection,setInspection]=useState<unknown>(null);
-  const [files,setFiles]=useState<{name:string;bytes:number}[]>([]),[unknown,setUnknown]=useState(false);
-  const transcript=useRef<HTMLDivElement>(null),followBottom=useRef(true),fileInput=useRef<HTMLInputElement>(null),epoch=useRef(0);
+  const [files,setFiles]=useState<{name:string;bytes:number}[]>([]),[unknown,setUnknown]=useState(false),[sopResults,setSopResults]=useState<Record<string,SopGenerationResult>>({});
+  const transcript=useRef<HTMLDivElement>(null),followBottom=useRef(true),fileInput=useRef<HTMLInputElement>(null),epoch=useRef(0),sopProcessing=useRef(new Set<string>());
   const openGate=useRef({opened,epoch:0});
   if(openGate.current.opened!==opened)openGate.current={opened,epoch:openGate.current.epoch+(opened?1:0)};
   const status=useQuery({queryKey:['pi-workbench-status',workspaceId,userId,pageId,openGate.current.epoch],enabled:opened,retry:false,gcTime:0,queryFn:({signal})=>piRequest<{enabled:boolean;models?:PiModel[];configuredModels?:PiModel[];canManageModels?:boolean}>('status',{pageId},signal)});
@@ -54,6 +55,26 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
   const selectedModel=currentModel||(pendingAvailable?pendingModel:(availableModels[0]?modelKey(availableModels[0]):''));
   const desiredModel=availableModels.find(model=>modelKey(model)===selectedModel);
   useEffect(()=>{if(followBottom.current&&transcript.current)transcript.current.scrollTop=transcript.current.scrollHeight;},[data?.messages,data?.partial,data?.dialogs]);
+  useEffect(()=>{
+    if(!sessionId||!data?.messages?.length)return;
+    const returned=new Map<string,boolean>();
+    for(const message of data.messages)if(message.role==='toolResult'&&typeof message.toolCallId==='string')returned.set(message.toolCallId,message.isError!==true);
+    for(const message of data.messages){
+      if(message.role!=='assistant'||!Array.isArray(message.content))continue;
+      for(const part of message.content){
+        if(part?.type!=='toolCall'||part.name!=='generate_sop'||typeof part.id!=='string'||returned.get(part.id)!==true||sopProcessing.current.has(part.id))continue;
+        const toolCallId=part.id;sopProcessing.current.add(toolCallId);setSopResults(current=>({...current,[toolCallId]:{state:'pending'}}));
+        void api.post<{state:string;url?:string;revision?:number;template?:{id:string;version:string};reused?:boolean}>('/pages/handbook/agent-generate',{sessionId,toolCallId},{timeout:120000}).then(response=>{
+          setSopResults(current=>({...current,[toolCallId]:{state:'succeeded',url:response.data.url,revision:response.data.revision,template:response.data.template,reused:response.data.reused}}));
+          void client.invalidateQueries({queryKey:['sop-handbook',userId,pageId]});
+        }).catch(failure=>{
+          const code=(failure as {response?:{data?:{message?:string}}})?.response?.data?.message;
+          const message=code==='LAYOUT_SOURCE_CHANGED'?'原稿已经有新版本，请重新发送一次生成要求。':'SOP 生成没有完成，请检查模型和文档权限后重试。';
+          setSopResults(current=>({...current,[toolCallId]:{state:'failed',message}}));
+        });
+      }
+    }
+  },[sessionId,data?.messages,client,userId,pageId]);
   useEffect(()=>()=>{epoch.current++;},[]);
   useEffect(()=>{
     if(!accessFailed)return;
@@ -87,19 +108,20 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
     catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
     finally{if(epoch.current===generation)setPosting(false);}
   }
-  async function send(){
-    if(!text.trim()||posting||unknown||!ready||accessFailed||(!configured&&!text.trim().startsWith('/')))return;
-    const generation=epoch.current,message=text,attachment=image;let target=sessionId;setPosting(true);setError('');
+  async function sendMessage(message:string,attachment:ImageInput|null=null,clearComposer=false){
+    const value=message.trim();if(!value||posting||unknown||!ready||accessFailed||(!configured&&!value.startsWith('/')))return;
+    const generation=epoch.current;let target=sessionId;setPosting(true);setError('');
     try{
       if(!target){
         target=await createConversation();if(epoch.current!==generation)return;setSessionId(target);try{localStorage.setItem(storageKey,target);}catch{}
         if(desiredModel){await command('set_model',{provider:desiredModel.provider,modelId:desiredModel.id},target);if(epoch.current!==generation)return;setPendingModel('');}
       }
-      await command('prompt',{message,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},target);
-      if(epoch.current===generation){setText(current=>current===message?'':current);setImage(current=>current===attachment?null:current);followBottom.current=true;}
+      await command('prompt',{message:value,...(attachment?{images:[attachment]}:{}),...(busy?{streamingBehavior:mode}:{})},target);
+      if(epoch.current===generation){if(clearComposer)setText(current=>current===message?'':current);if(attachment)setImage(current=>current===attachment?null:current);followBottom.current=true;}
     }catch(failure){if(epoch.current===generation){setError(piError(failure));setUnknown(true);}}
     finally{if(epoch.current===generation)setPosting(false);}
   }
+  async function send(){await sendMessage(text,image,true);}
   async function addSource(item:Candidate){
     const generation=epoch.current,target=sessionId;setError('');
     try{
@@ -153,10 +175,8 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       {data?.sessions?.length>0&&<Select label="恢复原生历史会话" size="xs" data={data.sessions.map(item=>({value:item.path,label:item.name}))} value={data.state.sessionFile||null} onChange={value=>value&&void act('switch_session',{sessionPath:value})}/>}
     </Stack></Modal>
     <div className={classes.transcript} ref={transcript} onScroll={()=>{const node=transcript.current;if(node)followBottom.current=node.scrollHeight-node.scrollTop-node.clientHeight<60;}} aria-live="polite" aria-label="智能体对话记录">
-      {!data?.messages?.length&&<div className={classes.empty}><div className={classes.emptyIcon}><IconSparkles size={22}/></div><div className={classes.emptyTitle}>从这份资料开始</div><div className={classes.emptyDescription}>一起梳理流程、补齐缺项，把经验变成可以反复使用的方法。</div>
-        <div className={classes.suggestions}>{[{text:'梳理这份文档的关键步骤',Icon:IconRoute},{text:'找出流程中的缺项与冲突',Icon:IconChecklist},{text:'把已有经验整理成可复用技能',Icon:IconWand}].map(({text:value,Icon})=><button type="button" className={classes.suggestion} key={value} onClick={()=>setText(value)}><Icon size={17}/><span>{value}</span><IconArrowUpRight size={14}/></button>)}</div>
-      </div>}
-      {accessFailed?<div className={classes.error}>{piError(view.error||status.error||sessions.error)}</div>:data&&<PiTranscript messages={data.messages} partial={data.partial}/>}
+      {!data?.messages?.length&&<div className={classes.empty}><div className={classes.emptyIcon}><IconSparkles size={22}/></div><div className={classes.emptyTitle}>从这份资料开始</div><div className={classes.emptyDescription}>直接告诉智能体你要完成的事，也可以使用底部快捷指令。</div></div>}
+      {accessFailed?<div className={classes.error}>{piError(view.error||status.error||sessions.error)}</div>:data&&<PiTranscript messages={data.messages} partial={data.partial} sopResults={sopResults}/>}
       {data?.dialogs?.map(request=><PiWorkbenchQuestion key={String(request.id)} request={request} onRespond={respond}/>)}
       {data?.notices?.filter(item=>['notify','setStatus','setWidget'].includes(String(item.method))).map((item,index)=><div key={index} className={classes.notice}>{String(item.message||item.statusText||(Array.isArray(item.widgetLines)?item.widgetLines.join('\n'):''))}</div>)}
       {data?.notices?.filter(item=>item.method==='set_editor_text'&&typeof item.text==='string').map(item=><Button key={String(item.id)} size="compact-xs" variant="subtle" onClick={()=>{if(!text||window.confirm('用扩展返回的草稿替换当前输入内容？'))setText(String(item.text));}}>将扩展返回的草稿填入输入框</Button>)}
@@ -164,6 +184,7 @@ export function PiWorkbenchPanel({userId,workspaceId,pageId,title}:{userId:strin
       {!!data&&files.map(file=><Button key={file.name} variant="subtle" size="compact-xs" onClick={()=>void download(file.name)}>{file.name}（生成文件）</Button>)}
     </div>
     <div className={classes.composerDock}>
+    <div className={classes.quickPrompts}>{[{text:'把这篇文档生成标准 SOP 手册',Icon:IconBook2},{text:'梳理这篇文档的关键步骤',Icon:IconRoute},{text:'找出流程中的缺项与冲突',Icon:IconChecklist}].map(({text:value,Icon})=><button type="button" className={classes.quickPrompt} key={value} disabled={posting||unknown||!ready||accessFailed||!configured} onClick={()=>void sendMessage(value)}><Icon size={14}/><span>{value}</span></button>)}</div>
     {sourceItems.length>0&&<div className={classes.sources}>{sourceItems.map((source,index)=><span className={classes.source} key={source.key||index}><IconFileText size={12}/><span className={classes.sourceText} title={source.title}>{source.title}{source.revision?` · 第${source.revision}版`:''}</span>{!sessionId&&<ActionIcon size="xs" variant="subtle" aria-label={`移除${source.title}`} onClick={()=>setSelected(items=>items.filter(item=>item.id!==source.pageId))}><IconX size={10}/></ActionIcon>}</span>)}</div>}
     {sourcePicker&&!accessFailed&&<Stack gap={4} mb="xs"><TextInput label="添加文档" placeholder="搜索文档标题" size="xs" value={query} onChange={event=>setQuery(event.currentTarget.value)}/><Button size="compact-xs" variant="subtle" onClick={()=>void addSource({id:pageId,title})}>附加当前文档</Button>{search.data?.slice(0,8).map(item=><Button key={item.id} size="compact-xs" variant="subtle" onClick={()=>void addSource(item)}>{item.title}</Button>)}</Stack>}
     {(busy||posting)&&<div className={classes.status}><Loader size={11}/>{posting?'正在提交操作':data?.state.isCompacting?'正在整理上下文':'智能体正在处理，可继续补充要求'}</div>}
