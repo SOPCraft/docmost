@@ -78,7 +78,6 @@ import {
 
 import VersionHistoryButton from "@/features/page-versions/version-history-button";
 
-import PiWorkbenchButton from "./pi-workbench-button";
 
 interface PageHeaderMenuProps {
   readOnly?: boolean;
@@ -125,7 +124,6 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
       {!readOnly && !page?.isBase && <PageEditModeToggle size="xs" />}
 
       <PageShareModal readOnly={readOnly} />
-      {page?.id && <PiWorkbenchButton />}
 
       <Tooltip label={t("Comments")} openDelay={250} withArrow>
         <ActionIcon

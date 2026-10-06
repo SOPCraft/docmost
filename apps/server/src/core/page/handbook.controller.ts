@@ -23,6 +23,8 @@ export class HandbookController {
   constructor(private readonly handbooks:HandbookService){}
   @Post('status') @HttpCode(HttpStatus.OK) @OAuthScope('read')
   status(@Body() dto:HandbookPageDto,@AuthUser() user:User){return this.handbooks.status(dto.pageId,user,dto.jobId);}
+  @Post('history') @HttpCode(HttpStatus.OK) @OAuthScope('read')
+  history(@Body() dto:HandbookPageDto,@AuthUser() user:User){return this.handbooks.historyResults(dto.pageId,user);}
   @Post('layout-options') @HttpCode(HttpStatus.OK) @OAuthScope('read')
   options(@Body() dto:HandbookPageDto,@AuthUser() user:User){return this.handbooks.layoutOptions(dto.pageId,user);}
   @Post('layout-preview') @HttpCode(HttpStatus.OK) @OAuthScope('write')

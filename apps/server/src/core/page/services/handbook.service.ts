@@ -178,6 +178,16 @@ export class HandbookService implements OnApplicationBootstrap,OnApplicationShut
     const walk=(n:any)=>{if(['image','video'].includes(n.type)){const u=new URL(n.attrs.src);if(u.origin!==origin||u.pathname.split('/')[3]!==n.attrs.attachmentId)throw new BadRequestException('INVALID_MEDIA_REFERENCE');map.set(u.href,n.type);}for(const c of n.content||[])walk(c);};walk(content);return [...map.keys()];
   }
   private async verifyAssets(manifest:any,user:User,origin:string){for(const a of manifest.assets||[])await this.asset(a.url,user,origin);}
+  async historyResults(pageId:string,user:User){
+    const c=await this.configuration();if(!c)return {enabled:false,items:[]};
+    const access=await this.access(pageId,user),target=await this.store.target(user.workspaceId,pageId);
+    if(!target)return {enabled:true,items:[]};if(target.spaceId!==access.page.spaceId)throw new ForbiddenException('SOURCE_MOVED');
+    const rows=await this.store.history(user.workspaceId,pageId,12),items=[];
+    for(const job of rows){if(job.spaceId!==access.page.spaceId)continue;try{await this.verifyAssets(job.manifest,access.user,c.origin);}catch{continue;}
+      items.push({jobId:job.id,revision:job.revision,versionId:job.versionId,template:job.binding?.template||null,current:target.currentJobId===job.id,completedAt:job.completedAt||null,url:'/api/pages/handbook/view/'+pageId+'/'+job.id+'/index.html'});
+    }
+    return {enabled:true,items};
+  }
   async status(pageId:string,user:User,viewingJobId?:string){
     const c=await this.configuration();if(!c)return {enabled:false,configured:false};
     const access=await this.access(pageId,user),target=await this.store.target(user.workspaceId,pageId);

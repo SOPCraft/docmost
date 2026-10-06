@@ -68,7 +68,7 @@ export default function Aside() {
   switch (tab) {
     case "pi":
       component = <PiWorkbenchSidebar />;
-      title = "智能体对话";
+      title = "SOP手册";
       break;
     case "history":
       component = isAsideOpen ? <HistorySidebar /> : null;
