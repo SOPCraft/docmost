@@ -71,10 +71,9 @@
 .hint { font-size:10px; padding:9px 2px 0; }
 @media(max-height:680px) { .empty { padding-top:4px; gap:9px; } .suggestion { padding:9px 11px; } .emptyIcon { width:34px; height:34px; } .emptyTitle { font-size:16px; } }
 
-.quickPrompts { display:flex; gap:6px; overflow-x:auto; padding:0 0 8px; scrollbar-width:none; }
-.quickPrompts::-webkit-scrollbar { display:none; }
-.quickPrompt { flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; max-width:240px; border:1px solid var(--mantine-color-default-border); border-radius:999px; padding:6px 10px; background:var(--mantine-color-body); color:var(--mantine-color-text); font:inherit; font-size:11px; line-height:1.35; cursor:pointer; }
-.quickPrompt:first-child { border-color:var(--mantine-primary-color-light-hover); background:var(--mantine-primary-color-light); color:var(--mantine-primary-color-light-color); }
+.quickPrompts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; padding:0 0 8px; }
+.quickPrompt { width:100%; min-width:0; display:inline-flex; align-items:center; justify-content:flex-start; gap:6px; border:1px solid var(--mantine-color-default-border); border-radius:9px; padding:7px 9px; background:var(--mantine-color-body); color:var(--mantine-color-text); font:inherit; font-size:11px; line-height:1.35; cursor:pointer; }
+.quickPrompt:first-child { grid-column:1 / -1; border-color:var(--mantine-primary-color-light-hover); background:var(--mantine-primary-color-light); color:var(--mantine-primary-color-light-color); }
 .quickPrompt:hover:not(:disabled) { background:var(--mantine-color-default-hover); }
 .quickPrompt:first-child:hover:not(:disabled) { background:var(--mantine-primary-color-light-hover); }
 .quickPrompt:disabled { opacity:.45; cursor:not-allowed; }
@@ -87,4 +86,4 @@
 .sopResultText { margin-top:3px; font-size:11px; color:var(--mantine-color-dimmed); line-height:1.55; }
 .sopOpen { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; padding:7px 10px; border-radius:8px; background:var(--mantine-primary-color-filled); color:var(--mantine-color-white); text-decoration:none; font-size:11px; font-weight:600; }
 .sopOpen:hover { background:var(--mantine-primary-color-filled-hover); }
-@media(max-width:520px){.quickPrompt{max-width:210px}.sopResult{align-items:flex-start;flex-direction:column}.sopOpen{width:100%}}
+@media(max-width:520px){.quickPrompts{grid-template-columns:1fr}.quickPrompt:first-child{grid-column:auto}.sopResult{align-items:flex-start;flex-direction:column}.sopOpen{width:100%}}
