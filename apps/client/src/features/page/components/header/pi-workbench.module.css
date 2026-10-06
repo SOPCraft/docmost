@@ -86,29 +86,29 @@
 .sopResultText { margin-top:3px; font-size:11px; color:var(--mantine-color-dimmed); line-height:1.55; }
 .sopOpen { flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; padding:7px 10px; border-radius:8px; background:var(--mantine-primary-color-filled); color:var(--mantine-color-white); text-decoration:none; font-size:11px; font-weight:600; }
 .sopOpen:hover { background:var(--mantine-primary-color-filled-hover); }
-@media(max-width:520px){.model{flex-basis:132px;width:132px}.sopResult{align-items:flex-start;flex-direction:column}.sopOpen{width:100%}}
+@media(max-width:520px){.model{flex-basis:132px;width:132px}.sopResult{align-items:flex-start;flex-direction:column}.sopOpen{width:100%}.handbookCard{width:100%;min-width:0}}
 
 .handbookShelf { flex-shrink:0; padding:10px 2px 9px; border-bottom:1px solid var(--mantine-color-default-border); }
 .handbookShelfHeader { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:7px; font-size:11px; font-weight:600; }
 .handbookShelfHeader>span:first-child { display:inline-flex; align-items:center; gap:6px; }
 .handbookShelfCount { font-size:9px; font-weight:400; color:var(--mantine-color-dimmed); }
-.handbookCards { display:flex; flex-direction:column; gap:6px; }
-.handbookCard { width:100%; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border:1px solid var(--mantine-color-default-border); border-radius:8px; text-decoration:none; color:var(--mantine-color-text); background:var(--mantine-color-body); }
-.handbookCard>div { display:flex; align-items:center; gap:8px; min-width:0; }
+.handbookCards { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+.handbookCard { width:fit-content; min-width:250px; max-width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:9px 11px; border:1px solid var(--mantine-color-default-border); border-radius:8px; text-decoration:none; color:var(--mantine-color-text); background:var(--mantine-color-body); }
 .handbookCard[data-current="true"] { border-color:var(--mantine-primary-color-light-hover); background:var(--mantine-primary-color-light); }
-.handbookCard strong { font-size:11px; white-space:nowrap; }
-.handbookCard span { font-size:9px; color:var(--mantine-color-dimmed); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.handbookCard small { font-size:9px; color:var(--mantine-color-dimmed); white-space:nowrap; flex-shrink:0; }
+.handbookCardTitle { display:flex; align-items:center; gap:7px; min-width:0; }
+.handbookCardTitle strong { font-size:11px; line-height:1.4; white-space:nowrap; }
+.handbookStatus { display:inline-flex; align-items:center; padding:2px 6px; border-radius:999px; background:var(--mantine-color-default-hover); color:var(--mantine-color-dimmed); font-size:9px; line-height:1.2; white-space:nowrap; }
+.handbookStatus[data-current="true"] { background:var(--mantine-primary-color-light); color:var(--mantine-primary-color-light-color); }
+.handbookCardMeta { max-width:100%; font-size:9px; line-height:1.45; color:var(--mantine-color-dimmed); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .handbookMore { margin-top:6px; align-self:flex-start; }
 .handbookEmpty { font-size:10px; color:var(--mantine-color-dimmed); padding:2px 0 4px; }
 .handbookDrawer { display:flex; flex-direction:column; gap:10px; min-height:0; }
 .handbookDrawerSummary { font-size:11px; color:var(--mantine-color-dimmed); padding-bottom:6px; border-bottom:1px solid var(--mantine-color-default-border); }
 .handbookDrawerList { display:flex; flex-direction:column; gap:6px; }
-.handbookDrawerCard { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; border:1px solid var(--mantine-color-default-border); border-radius:8px; color:var(--mantine-color-text); text-decoration:none; background:var(--mantine-color-body); }
+.handbookDrawerCard { display:flex; flex-direction:column; align-items:flex-start; gap:4px; padding:10px 11px; border:1px solid var(--mantine-color-default-border); border-radius:8px; color:var(--mantine-color-text); text-decoration:none; background:var(--mantine-color-body); }
 .handbookDrawerCard[data-current="true"] { border-color:var(--mantine-primary-color-light-hover); background:var(--mantine-primary-color-light); }
-.handbookDrawerCard>div { display:flex; flex-direction:column; gap:2px; min-width:0; }
-.handbookDrawerCard strong { font-size:12px; }
-.handbookDrawerCard span,.handbookDrawerCard small { font-size:10px; color:var(--mantine-color-dimmed); }
+.handbookDrawerCard .handbookCardTitle strong { font-size:12px; }
+.handbookDrawerCard .handbookCardMeta { font-size:10px; }
 .sourceRail { padding-bottom:9px; }
 .sources { align-items:center; }
 .sourcePickerList { display:flex; flex-direction:column; gap:3px; max-height:260px; overflow:auto; }
