@@ -170,14 +170,16 @@ export default function GlobalAppShell({
             id={ASIDE_PANEL_ID}
             tabIndex={-1}
             className={classes.aside}
-            p={asideTab === "history" || asideTab === "pi" ? 0 : "md"}
-            data-history-drawer={asideTab === "history" ? "true" : undefined}
+            p={asideTab === "history" || asideTab === "sopHistory" || asideTab === "pi" ? 0 : "md"}
+            data-history-drawer={asideTab === "history" || asideTab === "sopHistory" ? "true" : undefined}
             data-pi-drawer={asideTab === "pi" ? "true" : undefined}
             style={asideResize.dragging ? { transitionDuration: "0ms" } : undefined}
             withBorder={false}
             aria-label={
               asideTab === "pi"
                 ? "SOP手册"
+                : asideTab === "sopHistory"
+                ? "SOP 历史版本"
                 : asideTab === "history"
                 ? "历史版本筛选与列表"
                 : asideTab === "comments"

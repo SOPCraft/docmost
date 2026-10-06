@@ -10,7 +10,7 @@ export const desktopSidebarAtom = atomWithWebStorage<boolean>(
 
 export const desktopAsideAtom = atom<boolean>(false);
 
-// Valid `tab` values: "" | "comments" | "toc" | "chat" | "details" | "history"
+// Valid `tab` values: "" | "comments" | "toc" | "chat" | "details" | "history" | "pi" | "sopHistory"
 type AsideStateType = {
   tab: string;
   isAsideOpen: boolean;
