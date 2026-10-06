@@ -35,6 +35,13 @@ const PageDetailsAside = lazy(() =>
 const HistorySidebar = lazy(
   () => import("@/features/page-versions/history-sidebar"),
 );
+const SopHistorySidebar = lazy(
+  () => import("@/features/page-versions/sop-history-sidebar"),
+);
+
+const PiWorkbenchSidebar = lazy(() => import("@/features/page/components/header/pi-workbench-panel"));
+
+import { shouldClosePiAside } from "@/features/page/components/header/pi-aside-keyboard";
 
 export default function Aside() {
   const [{ tab, isAsideOpen }, setAsideState] = useAtom(asideStateAtom);
@@ -42,10 +49,10 @@ export default function Aside() {
   const pageEditor = useAtomValue(pageEditorAtom);
   const closeAside = () => {
     setAsideState((s) => ({ ...s, isAsideOpen: false }));
-    if (tab === "history")
+    if (tab === "history" || tab === "pi" || tab === "sopHistory")
       requestAnimationFrame(() =>
         document
-          .querySelector<HTMLElement>('[data-testid="history-trigger"]')
+          .querySelector<HTMLElement>(tab === "history" ? '[data-testid="history-trigger"]' : '[data-testid="handbook-trigger"]')
           ?.focus(),
       );
   };
@@ -53,7 +60,7 @@ export default function Aside() {
   useEffect(() => {
     if (!isAsideOpen) return;
     const panel = document.getElementById(ASIDE_PANEL_ID);
-    if (tab === "history")
+    if (tab === "history" || tab === "sopHistory")
       panel?.querySelector<HTMLElement>("[data-history-panel-body]")?.focus();
     else panel?.focus();
   }, [isAsideOpen, tab]);
@@ -62,9 +69,17 @@ export default function Aside() {
   let component: ReactNode;
 
   switch (tab) {
+    case "pi":
+      component = <PiWorkbenchSidebar />;
+      title = "SOP手册";
+      break;
     case "history":
       component = isAsideOpen ? <HistorySidebar /> : null;
       title = "Page history";
+      break;
+    case "sopHistory":
+      component = isAsideOpen ? <SopHistorySidebar /> : null;
+      title = "SOP 历史版本";
       break;
     case "comments":
       component = <CommentListWithTabs />;
@@ -89,11 +104,11 @@ export default function Aside() {
 
   return (
     <Box
-      p="md"
-      tabIndex={tab === "history" ? -1 : undefined}
-      data-history-panel-body={tab === "history" ? "true" : undefined}
+      p={tab === "pi" ? 18 : "md"}
+      tabIndex={tab === "history" || tab === "sopHistory" || tab === "pi" ? -1 : undefined}
+      data-history-panel-body={tab === "history" || tab === "sopHistory" ? "true" : undefined}
       onKeyDown={(e) => {
-        if (tab === "history" && e.key === "Escape" && !e.defaultPrevented)
+        if (tab === "pi" ? shouldClosePiAside(e) : (tab === "history" || tab === "sopHistory") && e.key === "Escape" && !e.defaultPrevented)
           closeAside();
       }}
       style={{
@@ -106,8 +121,8 @@ export default function Aside() {
       {component && (
         <>
           {tab !== "chat" && (
-            <Group justify="space-between" wrap="nowrap" mb="md">
-              <Title order={2} size="h6" fw={500}>
+            <Group justify="space-between" wrap="nowrap" mb={tab === "pi" ? 10 : "md"}>
+              <Title order={2} size="h6" fw={tab === "pi" ? 600 : 500}>
                 {t(title)}
               </Title>
               <Tooltip label={t("Close")} withArrow>
@@ -124,7 +139,7 @@ export default function Aside() {
           )}
 
           <Suspense fallback={null}>
-            {tab === "comments" || tab === "chat" || tab === "history" ? (
+            {tab === "comments" || tab === "chat" || tab === "history" || tab === "sopHistory" || tab === "pi" ? (
               component
             ) : (
               <ScrollArea

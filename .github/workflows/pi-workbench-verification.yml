@@ -1,0 +1,78 @@
+name: Pi workbench verification
+
+on:
+  pull_request:
+    branches: [codex/d2-display-source-20261004]
+    paths:
+      - 'apps/client/src/features/page/components/header/pi-*'
+      - 'apps/client/src/components/layouts/global/**'
+      - 'apps/server/src/core/page/pi-workbench*'
+      - 'apps/server/src/core/page/services/pi-workbench*'
+      - '.github/workflows/pi-workbench-verification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pi-workbench-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-verification:
+    if: github.repository == 'SOPCraft/docmost'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      NX_DAEMON: 'false'
+      NODE_OPTIONS: '--max-old-space-size=4096'
+    steps:
+      - name: Read the exact proposed source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Use the tested Node version
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '26.8.1'
+      - name: Install the pinned package manager
+        run: npm install --global pnpm@11.25.0 --ignore-scripts --no-audit --no-fund
+      - name: Install locked dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Compile shared packages
+        run: |
+          pnpm --dir apps/server exec tsc --build ../../packages/base-formula/tsconfig.json
+          pnpm --dir packages/editor-ext run build
+      - name: Verify types, native panel and authenticated host
+        shell: bash
+        run: |
+          mkdir -p verification-output
+          git rev-parse HEAD > verification-output/tested-commit.txt
+          node --version > verification-output/node-version.txt
+          set +e
+          pnpm --dir apps/server exec tsc -p tsconfig.build.json --noEmit --incremental false > verification-output/server-types.log 2>&1
+          server_types=$?
+          pnpm --dir apps/client exec tsc -p tsconfig.json --noEmit --incremental false > verification-output/client-types.log 2>&1
+          client_types=$?
+          pnpm --dir apps/server exec jest --runInBand --no-cache --json --outputFile="$PWD/verification-output/server-tests.json" src/core/page/services/pi-workbench.service.spec.ts src/core/page/services/pi-sop.service.spec.ts src/core/page/pi-sop.controller.spec.ts > verification-output/server-tests.log 2>&1
+          server_tests=$?
+          pnpm --dir apps/client exec vitest run --maxWorkers=2 --no-file-parallelism --reporter=json --outputFile="$PWD/verification-output/client-tests.json" > verification-output/client-tests.log 2>&1
+          client_tests=$?
+          pnpm --dir apps/server run build > verification-output/server-build.log 2>&1
+          server_build=$?
+          pnpm --dir apps/client exec vite build > verification-output/client-build.log 2>&1
+          client_build=$?
+          printf '{"serverTypes":%s,"clientTypes":%s,"serverTests":%s,"clientTests":%s,"serverBuild":%s,"clientBuild":%s}\n' "$server_types" "$client_types" "$server_tests" "$client_tests" "$server_build" "$client_build" > verification-output/exits.json
+          cat verification-output/exits.json
+          cat verification-output/server-types.log verification-output/client-types.log
+          test "$server_types" -eq 0 && test "$client_types" -eq 0 && test "$server_tests" -eq 0 && test "$client_tests" -eq 0 && test "$server_build" -eq 0 && test "$client_build" -eq 0
+      - name: Retain verification evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pi-workbench-verification-${{ github.run_id }}
+          path: verification-output/
+          retention-days: 7
+          if-no-files-found: warn

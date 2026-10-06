@@ -22,6 +22,7 @@ const AiChatSidebar = React.lazy(
 );
 import { AppHeader } from "@/components/layouts/global/app-header.tsx";
 import Aside from "@/components/layouts/global/aside.tsx";
+import { useResizableAside } from "./use-resizable-aside";
 import classes from "./app-shell.module.css";
 import { useTrialEndAction } from "@/ee/hooks/use-trial-end-action.tsx";
 import { useToggleSidebar } from "@/components/layouts/global/hooks/hooks/use-toggle-sidebar.ts";
@@ -91,6 +92,7 @@ export default function GlobalAppShell({
   const isAiRoute = location.pathname.startsWith("/ai");
   const isPageRoute = location.pathname.includes("/p/");
   const showGlobalSidebar = !isSpaceRoute && !isSettingsRoute && !isAiRoute;
+  const asideResize = useResizableAside(isSpaceRoute && desktopOpened ? Number(sidebarWidth) : 0, isPageRoute && isAsideOpen);
 
   return (
     <>
@@ -107,7 +109,7 @@ export default function GlobalAppShell({
         }}
         aside={
           isPageRoute && {
-            width: 350,
+            width: asideResize.width,
             breakpoint: "sm",
             collapsed: {
               mobile:
@@ -168,11 +170,17 @@ export default function GlobalAppShell({
             id={ASIDE_PANEL_ID}
             tabIndex={-1}
             className={classes.aside}
-            p={asideTab === "history" ? 0 : "md"}
-            data-history-drawer={asideTab === "history" ? "true" : undefined}
+            p={asideTab === "history" || asideTab === "sopHistory" || asideTab === "pi" ? 0 : "md"}
+            data-history-drawer={asideTab === "history" || asideTab === "sopHistory" ? "true" : undefined}
+            data-pi-drawer={asideTab === "pi" ? "true" : undefined}
+            style={asideResize.dragging ? { transitionDuration: "0ms" } : undefined}
             withBorder={false}
             aria-label={
-              asideTab === "history"
+              asideTab === "pi"
+                ? "SOP手册"
+                : asideTab === "sopHistory"
+                ? "SOP 历史版本"
+                : asideTab === "history"
                 ? "历史版本筛选与列表"
                 : asideTab === "comments"
                   ? t("Comments")
@@ -185,6 +193,7 @@ export default function GlobalAppShell({
                         : undefined
             }
           >
+            <div className={classes.asideResizeHandle} {...asideResize.handleProps}><span /></div>
             <Aside />
           </AppShell.Aside>
         )}
